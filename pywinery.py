@@ -47,6 +47,28 @@ def getWineVersion():
 class LoopHalt(Exception):
     def __str__(self):
         return "Loop halted"
+        
+class ErrorManager(object):
+    def __init__(self):
+        self.__d = {}
+        self.__l = []
+        
+    def add(self, id, message):
+        self.__d[id] = message
+        self.__l.append(id)
+        
+    def remove(self, id):
+        while id in self.__l:
+            self.__l.remove(id)
+        
+    def last(self):
+        if self.isEmpty():
+            return None
+        return self.__d[self.__l[-1]]
+            
+    def isEmpty(self):
+        return len(self.__l)==0
+        
 
 class Main(object):
     def __init__(self, args=None):
@@ -57,26 +79,33 @@ class Main(object):
         if isfile(localgui):
             guifile = localgui
             
+        self.args = args
         self.killable_threads = []
         self.xml = gtk.glade.XML(guifile)
         self.configfile = expandvars("$HOME/.config/pywinery/prefixes.config")
 
         self.have_params = len(args)>1
-        self.winebin = getBin("wine")
-        if not bool(self.winebin):
-            print "Wine not found."
-            sys_exit(1)
-        
         self.msi = None
-        self.wineversion = getWineVersion()
-        self.autocreateprefix = self.wineversion > (1,)
+        self.wineversion = [0]
+        self.autocreateprefix = False
+        self.errors = ErrorManager()
         
-        #self.xml.get_widget("button10").set_property("visible", not self.autocreateprefix)
+        self.winebin = getBin("wine")
         
+        if not bool(self.winebin):
+            self.showError("nowine","Wine is not detected on your system")
+            self.xml.get_widget("expander1").set_property("visible", False)
+            self.xml.get_widget("button1").set_property("visible", False)
+            self.xml.get_widget("button8").set_property("visible", False)
+            
+        else:
+            self.wineversion = getWineVersion()
+            self.autocreateprefix = self.wineversion > (1,)
+            self.xml.get_widget("button13").set_property("visible",checkBin("wine-doors"))
+            
         if self.have_params:
             if isfile(args[1]) and guess_type(realpath(args[1]))[0].lower()=="application/x-msi":
                 self.msi = realpath(args[1])
-            #self.xml.get_widget("expander1").set_property("visible", False)
             self.xml.get_widget("hbuttonbox1").set_property("visible", True)
             self.xml.get_widget("hbox2").set_property("visible", False)
             
@@ -90,8 +119,9 @@ class Main(object):
         for i in (11,1,3,4,5,6,7):
             self.xml.get_widget("label%d" % i ).set_property("visible",False)
             
-        self.xml.get_widget("button13").set_property("visible",checkBin("wine-doors"))
+        
         self.xml.get_widget("vbox10").set_property("visible",False)
+        
         self.comboInit()
         dic = {"on_window1_destroy" : self.__quit,
                "on_button12_clicked" : self.__quit,
@@ -111,6 +141,23 @@ class Main(object):
             }
         self.xml.signal_autoconnect(dic)
         self.env = environ.copy()
+        
+    def showError(self, id=None, message=None):
+        if id==None:
+            message = self.errors.last()
+        else:
+            self.errors.add( id, message )
+        
+        if message:
+            self.xml.get_widget("labelerror").set_label(message)
+            self.xml.get_widget("errorbox").set_property("visible",True)
+        else:
+            self.xml.get_widget("errorbox").set_property("visible",False)        
+    
+    def hideError(self,id=None):
+        if id != None:
+            self.errors.remove(id)
+        self.showError()            
         
     def no_delete(self, w):
         w.hide()
@@ -151,7 +198,7 @@ class Main(object):
             open(self.configfile,"w").close()
             
         if self.have_params:
-            path = args[1]
+            path = realpath(self.args[1])
             try:
                 while len(path)>1:
                     for i in model:
@@ -224,35 +271,36 @@ class Main(object):
         return True
         
     def combochange(self,*args):
+        eid = "dirnotfound"
+        self.hideError(eid)
+        
         a = bool(self.xml.get_widget("combobox1").get_active() > -1)
         self.xml.get_widget("button1").set_property("sensitive", False)
         self.xml.get_widget("button8").set_property("sensitive", False)
         self.xml.get_widget("button7").set_property("sensitive", False)
         self.xml.get_widget("hbox1").set_property("sensitive", False)
         if a:
+            self.xml.get_widget("button7").set_property("sensitive", True)
             path = self.getComboValue()
             if isdir(path):
-                self.xml.get_widget("button7").set_property("sensitive", True)
-                self.xml.get_widget("hbox1").set_property("sensitive", True)
-                self.xml.get_widget("labelname").set_property("label", "on <b>%s</b>" % path_split(path)[1])
-                
-                t = self.checkIsPrefix(path)
-                b = self.autocreateprefix or t
+                if bool(self.winebin):
+                    self.xml.get_widget("hbox1").set_property("sensitive", True)
+                    
+                    t = self.checkIsPrefix(path)
+                    b = self.autocreateprefix or t
 
-                self.xml.get_widget("button1").set_property("sensitive", b)
-                self.xml.get_widget("button8").set_property("sensitive", b)
-                self.xml.get_widget("button2").set_property("sensitive", b)
-                self.xml.get_widget("button4").set_property("sensitive", b)
-                self.xml.get_widget("button5").set_property("sensitive", b)
-                self.xml.get_widget("button10").set_property("sensitive", not t)
-                self.xml.get_widget("button11").set_property("sensitive", b)
-                self.xml.get_widget("button13").set_property("sensitive", b)
-                self.env["WINEPREFIX"] = path
+                    self.xml.get_widget("button1").set_property("sensitive", b)
+                    self.xml.get_widget("button8").set_property("sensitive", b)
+                    self.xml.get_widget("button2").set_property("sensitive", b)
+                    self.xml.get_widget("button4").set_property("sensitive", b)
+                    self.xml.get_widget("button5").set_property("sensitive", b)
+                    self.xml.get_widget("button10").set_property("sensitive", not t)
+                    self.xml.get_widget("button11").set_property("sensitive", b)
+                    self.xml.get_widget("button13").set_property("sensitive", b)
+                    self.env["WINEPREFIX"] = path
             else:
-                self.xml.get_widget("button7").set_property("sensitive", True)
-                self.xml.get_widget("labelname").set_property("label", "<b>Directory not found</b>")
-        else:
-            self.xml.get_widget("labelname").set_property("label", "<b>None selected</b>")
+                self.showError(eid,"Directory not found.")
+            
         
     def __quit(self,*args):
         for i in self.killable_threads:
@@ -261,9 +309,10 @@ class Main(object):
         
     def createPrefix(self, path):
         if self.autocreateprefix:
-            p = self.execute("wineprefixcreate")
-        else:
             p = self.execute(["wineboot","-i"])
+        else:
+            p = self.execute("wineprefixcreate")
+            
         pid = len(self.killable_threads)
         self.killable_threads.append( p )
         
@@ -292,6 +341,7 @@ class Main(object):
             self.xml.get_widget("vbox10").set_property("visible",False)
             self.killable_threads.pop(pid)
             self.combochange()
+            self.xml.get_widget("button10").set_property("sensible",False)
             gtk.gdk.threads_leave()
             
         def terminate(*args):

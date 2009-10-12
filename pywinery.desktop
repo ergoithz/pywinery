@@ -8,4 +8,4 @@ Name=PyWinery
 GenericName=Wine prefix manager
 Terminal=false
 Type=Application
-MimeType=application/x-ms-dos-executable
+MimeType=application/x-ms-dos-executable;application/x-msi
