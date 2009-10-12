@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+ 
+DEB_PYTHON_SYSTEM=pycentral
+DBK2MAN_XSL=/usr/share/xml/docbook/stylesheet/nwalsh/manpages/docbook.xsl
+ 
+include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/class/python-distutils.mk
+ 
+install/pywinery::
+	mv $(CURDIR)/debian/pywinery/usr/bin/pywinery.py $(CURDIR)/debian/pywinery/usr/bin/pywinery
+ 

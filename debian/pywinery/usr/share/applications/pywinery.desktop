@@ -1,0 +1,11 @@
+[Desktop Entry]
+Categories=Wine;Applications;GTK;System;Emulator
+Comment=Wine prefix manager and launcher
+Encoding=UTF-8
+Exec=pywinery
+Icon=pywinery.svg
+Name=PyWinery
+GenericName=Wine prefix manager
+Terminal=false
+Type=Application
+MimeType=application/x-ms-dos-executable
