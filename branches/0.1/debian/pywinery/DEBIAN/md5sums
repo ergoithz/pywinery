@@ -1,0 +1,10 @@
+c79532268d6dde29ba89fff8a6ab9129  usr/share/pywinery/pywinery.svg
+b55ad6c4df228bd6cdfd1bd71bf3503d  usr/share/pywinery/gui.glade
+7866aa5b28c20630f4254bdfb81e2586  usr/share/applications/pywinery.desktop
+f1351356e4528e042e039b8e7ac98175  usr/share/pyshared-data/pywinery
+f832f3e25b0fd703aca5c0cbc6c74d99  usr/share/pyshared/pywinery-0.1.2.egg-info
+bc158992ee8e08f2eea0acc0be636451  usr/share/doc/pywinery/copyright
+7d5e2abe1cde3b6c79060846111c3c71  usr/share/doc/pywinery/README.Debian
+2ce3076806ab45649283490e802a99f8  usr/share/doc/pywinery/changelog.Debian.gz
+c79532268d6dde29ba89fff8a6ab9129  usr/share/pixmaps/pywinery.svg
+4310e54d98f3a7fc251d692f8158dc31  usr/bin/pywinery

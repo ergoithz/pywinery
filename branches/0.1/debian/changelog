@@ -1,0 +1,12 @@
+pywinery (0.1-2) testing; urgency=low
+
+  * Fixing some wine deprecation issues, and abnormal behaviour. 
+
+ -- spayder26 <spayder26@gmail.com>  Mon, 12 Oct 2009 18:31:00 +0000
+
+pywinery (0.1-1) unstable; urgency=low
+
+  * Initial release
+
+ -- spayder26 <spayder26@gmail.com>  Mon, 16 Mar 2009 18:31:27 +0000
+
