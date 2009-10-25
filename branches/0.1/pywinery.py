@@ -15,7 +15,7 @@ except:
     sys_exit(1)
     
 from os.path import realpath, split as path_split, join as path_join, isfile, isdir, expandvars, dirname
-from os import environ, listdir, linesep, kill as os_kill
+from os import environ, listdir, sep, linesep, kill as os_kill
 from commands import getoutput
 from subprocess import Popen
 from distutils.dir_util import mkpath
@@ -68,6 +68,9 @@ class ErrorManager(object):
             
     def isEmpty(self):
         return len(self.__l)==0
+
+def returnFalse():
+    return False
         
 
 class Main(object):
@@ -79,12 +82,12 @@ class Main(object):
         if isfile(localgui):
             guifile = localgui
             
-        self.args = args
         self.killable_threads = []
         self.xml = gtk.glade.XML(guifile)
         self.configfile = expandvars("$HOME/.config/pywinery/prefixes.config")
+        self.configlines = []
+        self.readConfigFile()
 
-        self.have_params = len(args)>1
         self.msi = None
         self.wineversion = [0]
         self.autocreateprefix = False
@@ -102,12 +105,40 @@ class Main(object):
             self.wineversion = getWineVersion()
             self.autocreateprefix = self.wineversion > (1,)
             self.xml.get_widget("button13").set_property("visible",checkBin("wine-doors"))
+        
+        
+        self.silent = False
+        self.nodebug = False
+        c=1
+        for i in args[1:]:
+            if i[0]!="-":
+                break # Given commands can contains - and -- too
+            elif i in ("-x","--nogui"):
+                self.silent = True
+            elif i in ("-s","--silent"):
+                self.nodebug = True
+            c += 1
             
-        if self.have_params:
-            if isfile(args[1]) and guess_type(realpath(args[1]))[0].lower()=="application/x-msi":
+        self.zig = args[c:]
+        self.favprefix = None
+        self.path = None
+
+        if self.zig:
+            path = realpath(self.zig[0])
+            self.path = dirname(path)
+            sp = self.path.split(sep)
+            for i in ("drive_c","c:"):
+                if i in sp:
+                    self.favprefix = sep.join(sp[:sp.index(i)])
+                    if not self.favprefix in self.configlines:
+                        self.unknowndir()
+                    break
+            
+            if isfile(self.zig[0]) and guess_type(realpath(self.zig[0]))[0].lower()=="application/x-msi":
                 self.msi = realpath(args[1])
             self.xml.get_widget("hbuttonbox1").set_property("visible", True)
             self.xml.get_widget("hbox2").set_property("visible", False)
+            
             
             self.xml.get_widget("button1").set_property("visible", not bool(self.msi))
             self.xml.get_widget("button8").set_property("visible", bool(self.msi))
@@ -129,7 +160,7 @@ class Main(object):
                "on_button1_clicked" : None,
                "on_button6_clicked" : self.adddir,
                "on_button7_clicked" : self.removeprefix,
-               "on_button1_clicked" : lambda x: (self.execute([self.winebin]+args[1:]), self.__quit()),
+               "on_button1_clicked" : self.runAndExit,
                "on_button8_clicked" : lambda x: (self.execute([self.winebin,"msiexec","/i",self.msi]), self.__quit()),
                "on_button2_clicked" : lambda x: self.execute("winecfg"),
                "on_button4_clicked" : lambda x: self.execute("winefile"),
@@ -138,9 +169,27 @@ class Main(object):
                "on_button10_clicked" : self.createPrefix,
                "on_button11_clicked" : lambda x: self.execute(["xterm","-e","wine","cmd"]),
                "on_button13_clicked" : lambda x: self.execute("wine-doors"),
+               "on_dialog1_delete_event" : returnFalse,
             }
         self.xml.signal_autoconnect(dic)
         self.env = environ.copy()
+        if self.nodebug:
+            self.env["WINEDEBUG"] = "-all"
+        
+    def readConfigFile(self):
+        if isfile(self.configfile):
+            f = open(self.configfile,"r")
+            self.configlines = [i.strip() for i in f.readlines()]
+            f.close()
+            self.configlines.sort()
+        else:
+            self.writeConfigFile()
+            
+    def writeConfigFile(self):
+        mkpath(path_split(self.configfile)[0])
+        f = open(self.configfile,"w")
+        f.writelines([ i+linesep for i in self.configlines ])
+        f.close()
         
     def showError(self, id=None, message=None):
         if id==None:
@@ -162,17 +211,33 @@ class Main(object):
     def no_delete(self, w):
         w.hide()
         return True 
+        
+    def runAndExit(self, *args):
+        self.execute( [self.winebin] + self.zig )
+        self.__quit()
     
     def run(self):
         try:
-            gtk.gdk.threads_init()
-            self.xml.get_widget("window1").show()
-            self.combochange()
-            gtk.main()
+            if self.silent:
+                if self.zig:
+                    if self.favprefix:
+                        self.env["WINEPREFIX"] = self.favprefix
+                        self.runAndExit()
+                    else:
+                        print "Pywinery is unable to find a suitable prefix."
+                else:
+                    print "Nothing to do"
+                sys_exit(1)
+            else:
+                gtk.gdk.threads_init()
+                self.xml.get_widget("window1").show()
+                self.combochange()
+                gtk.main()
         except KeyboardInterrupt:
             sys_exit(1)
+        sys_exit(0)
         
-    def comboInit(self):
+    def comboInit(self,auto=True):
         combo = self.xml.get_widget("combobox1")
         new = True
         modelp = combo.get_model()
@@ -188,55 +253,42 @@ class Main(object):
             combo.pack_start(render)
             combo.add_attribute(render, 'text', 0)
         
-        if isfile(self.configfile):
-            f = open(self.configfile,"r")
-            for i in f.readlines():
-                model.append([i.strip()])
-            f.close()
-        else:
-            mkpath(path_split(self.configfile)[0])
-            open(self.configfile,"w").close()
-            
-        if self.have_params:
-            path = realpath(self.args[1])
-            try:
-                while len(path)>1:
-                    for i in model:
-                        if path==i[0]:
-                            combo.set_active_iter(i.iter)
-                            raise LoopHalt
-                    path = path_split(path)[0]
-            except LoopHalt:
-                pass
+        for i in self.configlines:
+            model.append([i])
+         
+        if self.favprefix and auto:
+            for i in model:
+                if i[0]==self.favprefix:
+                    combo.set_active_iter(i.iter)
+                    break
             
     def adddir(self,*args):        
         dialog = gtk.FileChooserDialog(
-                        "Select a directory",
-                        self.xml.get_widget("window1"),
-                        gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                        (gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,gtk.STOCK_ADD,gtk.RESPONSE_OK))
+            "Select a directory",
+            self.xml.get_widget("window1"),
+            gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER,
+            (gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,gtk.STOCK_ADD,gtk.RESPONSE_OK))
                         
         response = dialog.run()
         if response == gtk.RESPONSE_OK:
             self.addfilenames(dialog.get_filenames())
         dialog.destroy()
         
+    def unknowndir(self,*args):
+        dialog = self.xml.get_widget("dialog1")
+        response = dialog.run()
+        if response == 1:
+            self.addfilenames([self.favprefix])
+        dialog.hide()
+        
     def addfilenames(self,list):
         if list:
-            newitems = []
+            a = len(self.configlines)
+            self.configlines += list
+            self.writeConfigFile()
+            self.comboInit(auto=False)
             combo = self.xml.get_widget("combobox1")
-            model = combo.get_model()
-            olditems = [i[0] for i in model]
-            for i in list:
-                if not i in olditems:
-                    newitems.append(i+linesep)
-                    model.append([i])
-            f = open(self.configfile,"a")
-            f.writelines(newitems)
-            f.close()
-            for i in model:
-                if i[0] == list[-1]:
-                    combo.set_active_iter(i.iter)
+            combo.set_active_iter(combo.get_model()[a].iter)
         
     def removeprefix(self,*args):
         combo = self.xml.get_widget("combobox1")
@@ -254,9 +306,8 @@ class Main(object):
         dialog.destroy()
         if response==gtk.RESPONSE_YES:
             model.remove(model.get_iter(combo.get_active()))
-            f = open(self.configfile,"w")
-            f.writelines([i[0]+linesep for i in model])
-            f.close()
+            self.configlines = [i[0] for i in model]
+            self.writeConfigFile()
         
     def getComboValue(self):
         combo = self.xml.get_widget("combobox1")
@@ -298,6 +349,7 @@ class Main(object):
                     self.xml.get_widget("button11").set_property("sensitive", b)
                     self.xml.get_widget("button13").set_property("sensitive", b)
                     self.env["WINEPREFIX"] = path
+                    
             else:
                 self.showError(eid,"Directory not found.")
             
@@ -305,7 +357,9 @@ class Main(object):
     def __quit(self,*args):
         for i in self.killable_threads:
             killPopen(i)
-        gtk.main_quit()
+        if gtk.main_level()>0:
+            gtk.main_quit()
+
         
     def createPrefix(self, path):
         if self.autocreateprefix:
@@ -341,7 +395,7 @@ class Main(object):
             self.xml.get_widget("vbox10").set_property("visible",False)
             self.killable_threads.pop(pid)
             self.combochange()
-            self.xml.get_widget("button10").set_property("sensible",False)
+            self.xml.get_widget("button10").set_property("sensitive",False)
             gtk.gdk.threads_leave()
             
         def terminate(*args):
@@ -363,9 +417,12 @@ class Main(object):
 if len(sys_argv)>1 and sys_argv[1] in ("--help","-h"):
     print '''pywinery - an easy graphical tool for wineprefixing
     Usage:
-        pywinery [OPTIONS]            Allows pywinery call wine with this options
-        pywinery PROGRAM [ARGUMENTS]  Allows pywinery call an exe with wine 
-        pywinery --help               Display this help and exit
+        pywinery [OPTIONS...] FILE [ARGs...]  Call an exe with wine.
+
+    Options:
+        -x, --nogui       Run with autodetected prefix.
+        -s, --silent      Hide winedebug messages.
+        -h, --help        Show this help.
     '''
 else:
     if __name__ == "__main__":
