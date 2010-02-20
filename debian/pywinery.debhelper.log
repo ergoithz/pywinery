@@ -20,7 +20,6 @@ dh_install
 dh_link
 dh_installmime
 dh_pycentral
-dh_python
 dh_strip
 dh_compress
 dh_fixperms
