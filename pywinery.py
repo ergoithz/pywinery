@@ -22,6 +22,7 @@ from distutils.dir_util import mkpath
 from mimetypes import guess_type
 from threading import Thread
 from time import sleep
+from exceptions import ValueError
 
 def getBin(name):
     return getoutput("which %s" % name).strip()
@@ -38,10 +39,11 @@ def killPopen(p, signal=15):
         
 def getWineVersion():
     a = getoutput("wine --version")
-    v = a.strip().split("-")[-1].split(".")
+    v = a.strip().split("-")[1].split(".")
     tr = [0]*len(v)
     for i in xrange(len(tr)):
         tr[i] = int(v[i])
+            
     return tuple(tr)
 
 class LoopHalt(Exception):
