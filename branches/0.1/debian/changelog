@@ -1,3 +1,8 @@
+pywinery (0.1-6) testing; urgency=high
+
+  * Fixed error with wine's version numbers containing chars
+
+ -- spayder26 <spayder26@gmail.com>  Sat, 22 May 2010 23:59:00 +0000
 pywinery (0.1-5) testing; urgency=high
 
   * Fixed wine dependency (wine1.2's branch)
