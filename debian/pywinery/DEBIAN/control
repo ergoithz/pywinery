@@ -1,0 +1,11 @@
+Package: pywinery
+Version: 0.1-4
+Architecture: all
+Maintainer: Spayder26 <spayder26@gmail.com>
+Installed-Size: 664
+Depends: python, python-central (>= 0.6.11), python-glade2 (>= 2.6), python-gtk2 (>= 2.6), wine (>= 0.9.50)
+Suggests: wine-doors
+Section: utils
+Priority: optional
+Description: Simple Wine multiple prefix manager, working as launcher or standalone application.
+Python-Version: all
