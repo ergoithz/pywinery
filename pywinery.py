@@ -22,19 +22,23 @@ from subprocess import Popen
 from distutils.dir_util import mkpath
 from mimetypes import guess_type
 from threading import Thread
-from time import sleep
+from time import sleep, time
 from exceptions import ValueError
 
-# Tree convenience recursive functions
-def optimize_tree(name,node,separator="/"):
-    if len(node)==0:
-        return {}
-    elif len(node)==1:
-        return optimize_tree(name+separator+node.keys()[0],node.values()[0],separator)
+# Tree recursive functions
+def optimize_tree(name,node,flag=True,sep="/"):
     r = {}
-    for i in node:
-        r[i] = optimize_tree(i,node[i],separator)
-    return {name:r}
+    if node:
+        if len(node)==1 and flag:
+            subnode = node.values()[0]
+            if subnode:
+                return optimize_tree(name+sep+node.keys()[0],subnode,True,sep)
+        if sep in name:
+            flag = 0
+        for i in node:
+            j,k = optimize_tree(i,node[i],flag,sep)
+            r[j] = k
+    return (name,r)
 
 def generate_tree(a,separator="/"):
     tree = {}
@@ -45,8 +49,8 @@ def generate_tree(a,separator="/"):
                 if not j in p:
                     p[j] = {}
                 p = p[j]
-    tr = optimize_tree("",tree,separator=separator)
-    return tr
+    n,tr = optimize_tree("",tree,sep=separator)
+    return {sep+n if n[0]!=sep else n:tr}
 
 # Other convenience functions
 def rFalse(*a,**b):
@@ -124,6 +128,7 @@ class Main(object):
         self.autocreateprefix = False
         self.configMode = False
         self.errors = ErrorManager()
+        self.lastTreeviewClick = 0
 
         self.winebin = getBin("wine")
 
@@ -280,16 +285,46 @@ class Main(object):
             modelp.clear()
             combo.set_model(None)
             new = False
-        model = gtk.ListStore(gobject.TYPE_STRING)
+        model = gtk.ListStore(gobject.TYPE_STRING,gobject.TYPE_STRING,gobject.TYPE_STRING)
+        model.set_sort_column_id(2,gtk.SORT_ASCENDING)
         combo.set_model(model)
 
         if new:
             render = gtk.CellRendererText()
-            combo.pack_start(render)
-            combo.add_attribute(render, 'text', 0)
+            render.set_property("ellipsize",pango.ELLIPSIZE_START)
+            render.set_property("ellipsize-set",False)
+            render.set_property("alignment",pango.ALIGN_RIGHT)
+            combo.pack_start(render,False)
+            combo.add_attribute(render, 'text', 1)
 
-        for i in self.configlines:
-            model.append([i])
+            render = gtk.CellRendererText()
+            render.set_property("ellipsize-set",False)
+            render.set_property("alignment",pango.ALIGN_LEFT)
+            combo.pack_start(render,False)
+            combo.add_attribute(render, 'text', 2)
+
+
+
+        a = {}
+        p = -1
+        while p==-1 or len(a)!=len(self.configlines):
+            for i in self.configlines:
+                n = sep.join(i.split(sep)[p:])
+                if i not in a:
+                    if n in a.values():
+                        u = None
+                        for j,k in a.items():
+                            if k==n:
+                                u=j
+                        if u:
+                            a.pop(u)
+                    else:
+                        a[i] = n
+            p -= 1
+
+        for i in a:
+            #model.append([i,dirname(i),i.split(sep)[-1]])
+            model.append([i,"...","%s" % (a[i])])
 
         if self.favprefix and auto:
             self.comboSet(self.favprefix)
@@ -315,11 +350,22 @@ class Main(object):
         dialog.destroy()
 
     def treeSelectionFunction(self, selection):
-        model = self.xml.get_widget("treeview1").get_model()
-        a = model.get_value(model.get_iter(selection),2)
-        if a in self.configlines:
-            self.comboSet(a)
+        t = time()
+        if t - self.lastTreeviewClick < 0.1:
             return True
+        self.lastTreeviewClick = t
+        tree = self.xml.get_widget("treeview1")
+        model = tree.get_model()
+        iter = model.get_iter(selection)
+        a = model.get_value(iter,2)
+        if a in self.configlines:
+            self.treeviewSelect(iter=iter)
+            self.comboSet(a)
+        else:
+            if tree.row_expanded(selection):
+                tree.collapse_row(selection)
+            else:
+                tree.expand_row(selection,False)
         return False
 
     def toggleConfig(self,visible=None):
@@ -344,7 +390,9 @@ class Main(object):
                 col.add_attribute(col_cell_img, "pixbuf", 1)
                 tree.append_column(col)
                 model = gtk.TreeStore(str, gtk.gdk.Pixbuf, str)
+                model.set_sort_column_id(0,gtk.SORT_ASCENDING)
                 tree.set_model(model)
+
                 treeselection.set_mode(gtk.SELECTION_SINGLE)
             else:
                 model.clear()
@@ -354,8 +402,10 @@ class Main(object):
             treeselection.set_select_function(self.treeSelectionFunction)
 
             imgdir   = tree.render_icon(stock_id="gtk-directory",    size=gtk.ICON_SIZE_MENU, detail=None)
+            imgprefix   = tree.render_icon(stock_id="gtk-harddisk",        size=gtk.ICON_SIZE_MENU, detail=None)
             imgerror = tree.render_icon(stock_id="gtk-dialog-error", size=gtk.ICON_SIZE_MENU, detail=None)
             prefix = self.getComboValue()
+            prefixes = self.configlines
 
             def tree_to_model(parent,node,path=""):
                 tr = []
@@ -363,8 +413,11 @@ class Main(object):
                     pwd = path+sep+i if path else i
                     is_directory = False
                     is_error = not exists(pwd)
+                    is_prefix = pwd in prefixes
                     if is_error:
                         img = imgerror
+                    elif is_prefix:
+                        img = imgprefix
                     elif isdir(pwd):
                         img = imgdir
                     else:
@@ -384,12 +437,21 @@ class Main(object):
             self.xml.get_widget(i).set_property("visible",visible)
 
         for i in selectiters:
-            path = model.get_path(i)
+            self.treeviewSelect(iter=i)
+        self.configMode = visible
+
+    def treeviewSelect(self, value=None, iter=None,):
+        tree = self.xml.get_widget("treeview1")
+        model = tree.get_model()
+        if value:
+            a = lambda x,y,z: self.treeviewSelect(iter=z) if (x.get_value(z,2) == value) else None
+            model.foreach(a)
+        elif iter:
+            path = model.get_path(iter)
             tree.expand_to_path(path)
             tree.set_cursor(path)
             tree.scroll_to_cell(path)
-            treeselection.select_iter(i)
-        self.configMode = visible
+            tree.get_selection().select_iter(iter)
 
     def unknowndir(self,*args):
         dialog = self.xml.get_widget("dialog1")
@@ -404,8 +466,7 @@ class Main(object):
             self.configlines += list
             self.writeConfigFile()
             self.comboInit(auto=False)
-            combo = self.xml.get_widget("combobox1")
-            combo.set_active_iter(combo.get_model()[a].iter)
+            self.comboSet(self.configlines[-1])
             if self.configMode:
                 self.toggleConfig(visible)
 
