@@ -9,4 +9,5 @@ Info for building and programming this app.
 = Details =
 == Building ==
 Python does not require compiling, but it's useful having this app as an deb, rpm... rather than a zipped script.
+
 Once on base dir: $ dpkg-buildpackage -rfakeroot
