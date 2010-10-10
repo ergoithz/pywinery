@@ -167,7 +167,8 @@ class Main(object):
             for i,j in self.configsublines.items():
                 if realpath(self.zig[0]) in j:
                     self.favprefix = i
-                    self.silent = True
+                    self.xml.get_widget("checkbutton1").set_property("active",True)
+                    self.silent = not self.openconfig
                     break
 
             if self.favprefix is None:
