@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.5
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from sys import exit as sys_exit, argv as sys_argv
 try:
@@ -120,6 +120,7 @@ class Main(object):
         self.xml = gtk.glade.XML(guifile)
         self.configfile = expandvars("$HOME/.config/pywinery/prefixes.config")
         self.configlines = []
+        self.configsublines = {}
         self.readConfigFile()
 
         self.msi = None
@@ -143,7 +144,7 @@ class Main(object):
 
 
         self.silent = False
-        self.nodebug = False
+        self.nodebug = False        #f.writelines([ i+linesep for i in self.configlines ])
         self.openconfig = False
 
         c=1
@@ -161,21 +162,27 @@ class Main(object):
         self.zig = args[c:]
         self.favprefix = None
         self.path = None
-
         if self.zig:
             # If an exe is given
-            path = realpath(self.zig[0])
-            self.path = dirname(path)
-            sp = self.path.split(sep)
-            for i in ("drive_c","dosdevices"):
-                if i in sp:
-                    self.favprefix = sep.join(sp[:sp.index(i)])
-                    if not self.favprefix in self.configlines:
-                        self.unknowndir()
+            for i,j in self.configsublines.items():
+                if realpath(self.zig[0]) in j:
+                    self.favprefix = i
+                    self.silent = True
                     break
 
-            if isfile(self.zig[0]) and guess_type(realpath(self.zig[0]))[0].lower()=="application/x-msi":
-                self.msi = realpath(args[1])
+            if self.favprefix is None:
+                path = realpath(self.zig[0])
+                self.path = dirname(path)
+                sp = self.path.split(sep)
+                for i in ("drive_c","dosdevices"):
+                    if i in sp:
+                        self.favprefix = sep.join(sp[:sp.index(i)])
+                        if not self.favprefix in self.configlines:
+                            self.unknowndir()
+                        break
+
+                if isfile(self.zig[0]) and guess_type(realpath(self.zig[0]))[0].lower()=="application/x-msi":
+                    self.msi = realpath(args[1])
 
             self.xml.get_widget("button1").set_property("visible", not bool(self.msi))
             self.xml.get_widget("button8").set_property("visible", bool(self.msi))
@@ -183,12 +190,15 @@ class Main(object):
         else:
             for i in (1,8,12):
                 self.xml.get_widget("button%d" % i).set_property("visible", False)
+
             self.xml.get_widget("expander1").set_expanded(True)
 
         for i in (11,1,3,4,5,6,7):
             self.xml.get_widget("label%d" % i ).set_property("visible",False)
 
         self.xml.get_widget("vbox10").set_property("visible",False)
+        self.xml.get_widget("vbox12").set_property("visible",False)
+        self.xml.get_widget("vbox15").set_property("visible", self.zig and not self.msi)
 
         self.comboInit()
         dic = {"on_window1_destroy" : self.__quit,
@@ -207,7 +217,9 @@ class Main(object):
                "on_button11_clicked" : lambda x: self.execute(["xterm","-e","wine","cmd"]),
                "on_button13_clicked" : lambda x: self.execute("wine-doors"),
                "on_button16_clicked" : lambda x: self.toggleConfig(True),
+               "on_button17_clicked" : self.removeapp,
                "on_button19_clicked" : lambda x: self.toggleConfig(False),
+               "on_checkbutton1_toggled" : self.addapp,
                "on_dialog1_delete_event" : rFalse,
             }
         self.xml.signal_autoconnect(dic)
@@ -218,16 +230,28 @@ class Main(object):
     def readConfigFile(self):
         if isfile(self.configfile):
             f = open(self.configfile,"r")
-            self.configlines = [i.strip() for i in f.readlines()]
+            self.configlines = []
+            self.configsublines = {}
+            for i in f.readlines():
+                si = i.strip()
+                if si:
+                    if si[0]==">":
+                        if self.configlines:
+                            self.configsublines[self.configlines[-1]].append(si[1:].strip())
+                    elif si:
+                        self.configlines.append(si)
+                        self.configsublines[si] = []
             f.close()
-            self.configlines.sort()
         else:
             self.writeConfigFile()
 
     def writeConfigFile(self):
         mkpath(path_split(self.configfile)[0])
         f = open(self.configfile,"w")
-        f.writelines([ i+linesep for i in self.configlines ])
+        for i in self.configlines:
+            f.write("%s%s" % ( i, linesep))
+            for j in self.configsublines[i]:
+                f.write(">%s%s" % ( j, linesep))
         f.close()
 
     def showError(self, id=None, message=None):
@@ -235,7 +259,6 @@ class Main(object):
             message = self.errors.last()
         else:
             self.errors.add( id, message )
-
         if message:
             self.xml.get_widget("labelerror").set_label(message)
             self.xml.get_widget("errorbox").set_property("visible",True)
@@ -269,9 +292,10 @@ class Main(object):
                 sys_exit(1)
             else:
                 gtk.gdk.threads_init()
-                self.xml.get_widget("window1").show()
+                window = self.xml.get_widget("window1")
                 self.combochange()
                 self.toggleConfig(self.openconfig)
+                window.show()
                 gtk.main()
         except KeyboardInterrupt:
             sys_exit(1)
@@ -288,7 +312,6 @@ class Main(object):
         model = gtk.ListStore(gobject.TYPE_STRING,gobject.TYPE_STRING,gobject.TYPE_STRING)
         model.set_sort_column_id(2,gtk.SORT_ASCENDING)
         combo.set_model(model)
-
         if new:
             render = gtk.CellRendererText()
             render.set_property("ellipsize",pango.ELLIPSIZE_START)
@@ -296,18 +319,14 @@ class Main(object):
             render.set_property("alignment",pango.ALIGN_RIGHT)
             combo.pack_start(render,False)
             combo.add_attribute(render, 'text', 1)
-
             render = gtk.CellRendererText()
             render.set_property("ellipsize-set",False)
             render.set_property("alignment",pango.ALIGN_LEFT)
             combo.pack_start(render,False)
             combo.add_attribute(render, 'text', 2)
-
-
-
         a = {}
         p = -1
-        while p==-1 or len(a)!=len(self.configlines):
+        while p==-1 or len(a)!=len(self.configlines) or len(self.configlines)==-p:
             for i in self.configlines:
                 n = sep.join(i.split(sep)[p:])
                 if i not in a:
@@ -321,7 +340,6 @@ class Main(object):
                     else:
                         a[i] = n
             p -= 1
-
         for i in a:
             #model.append([i,dirname(i),i.split(sep)[-1]])
             model.append([i,"...","%s" % (a[i])])
@@ -331,6 +349,9 @@ class Main(object):
 
     def comboSet(self,prefix):
         combo = self.xml.get_widget("combobox1")
+        if prefix is None:
+            combo.set_active(-1)
+            return
         model = combo.get_model()
         for i in model:
             if i[0]==prefix:
@@ -349,6 +370,17 @@ class Main(object):
             self.addfilenames(dialog.get_filenames())
         dialog.destroy()
 
+    def addapp(self, *args):
+        app = realpath(self.zig[0])
+        active = self.xml.get_widget("checkbutton1").get_property("active")
+        for i in self.configsublines:
+            if app in self.configsublines[i]:
+                self.configsublines[i].remove(app)
+        if active:
+            self.configsublines[self.getComboValue()].append(app)
+        self.writeConfigFile()
+
+
     def treeSelectionFunction(self, selection):
         t = time()
         if t - self.lastTreeviewClick < 0.1:
@@ -357,15 +389,23 @@ class Main(object):
         tree = self.xml.get_widget("treeview1")
         model = tree.get_model()
         iter = model.get_iter(selection)
-        a = model.get_value(iter,2)
-        if a in self.configlines:
-            self.treeviewSelect(iter=iter)
-            self.comboSet(a)
-        else:
+        a = model.get_value(iter,3)
+        if a==0:
             if tree.row_expanded(selection):
                 tree.collapse_row(selection)
             else:
                 tree.expand_row(selection,False)
+            self.comboSet(None)
+        elif a==1:
+            self.treeviewSelect(iter=iter)
+            self.comboSet(model.get_value(iter,2))
+            self.xml.get_widget("vbox16").set_property("visible",True)
+            self.xml.get_widget("vbox17").set_property("visible",False)
+        elif a==2:
+            self.treeviewSelect(iter=iter)
+            self.comboSet(model.get_value(model.iter_parent(iter),2))
+            self.xml.get_widget("vbox16").set_property("visible",False)
+            self.xml.get_widget("vbox17").set_property("visible",True)
         return False
 
     def toggleConfig(self,visible=None):
@@ -389,7 +429,7 @@ class Main(object):
                 col.add_attribute(col_cell_text, "text", 0)
                 col.add_attribute(col_cell_img, "pixbuf", 1)
                 tree.append_column(col)
-                model = gtk.TreeStore(str, gtk.gdk.Pixbuf, str)
+                model = gtk.TreeStore(str, gtk.gdk.Pixbuf, str, int)
                 model.set_sort_column_id(0,gtk.SORT_ASCENDING)
                 tree.set_model(model)
 
@@ -403,6 +443,7 @@ class Main(object):
 
             imgdir   = tree.render_icon(stock_id="gtk-directory",    size=gtk.ICON_SIZE_MENU, detail=None)
             imgprefix   = tree.render_icon(stock_id="gtk-harddisk",        size=gtk.ICON_SIZE_MENU, detail=None)
+            imgexe   = tree.render_icon(stock_id="gtk-execute",        size=gtk.ICON_SIZE_MENU, detail=None)
             imgerror = tree.render_icon(stock_id="gtk-dialog-error", size=gtk.ICON_SIZE_MENU, detail=None)
             prefix = self.getComboValue()
             prefixes = self.configlines
@@ -422,20 +463,25 @@ class Main(object):
                         img = imgdir
                     else:
                         img = imgerror
-                    li = model.append(parent, [i, img, pwd])
-                    if pwd == prefix:
-                        tr.append(li)
+                    li = model.append(parent, [i, img, pwd, int(is_prefix)])
+                    if is_prefix:
+                        for j in self.configsublines[pwd]:
+                            model.append(li, [j.split(sep)[-1], imgexe, j, 2])
+                        if pwd == prefix:
+                            tr.append(li)
+
                     tr += tree_to_model(li,node[i],pwd)
                 return tr
 
             selectiters = tree_to_model(None,generate_tree(self.configlines))
 
+
+        self.xml.get_widget("vbox17").set_property("visible",False)
         for i in ("hbuttonbox1","vbox2"):
             self.xml.get_widget(i).set_property("visible",not visible)
 
         for i in ("hbuttonbox3","vbox12"):
             self.xml.get_widget(i).set_property("visible",visible)
-
         for i in selectiters:
             self.treeviewSelect(iter=i)
         self.configMode = visible
@@ -478,7 +524,7 @@ class Main(object):
                     gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
                     gtk.MESSAGE_QUESTION,
                     gtk.BUTTONS_YES_NO,
-                    ("¿Do you really want to remove <b>%s</b> dir from prefixes list?" % model[combo.get_active()][0])
+                    ("¿Do you really want to remove <b>%s</b> dir from prefixes list?\n(No data will be removed)" % model[combo.get_active()][0])
                     )
         dialog.set_property("use-markup",True)
 
@@ -494,10 +540,21 @@ class Main(object):
             self.configlines = [i[0] for i in model]
             self.writeConfigFile()
 
+    def removeapp(self,*args):
+        tree = self.xml.get_widget("treeview1")
+        model, items = tree.get_selection().get_selected_rows()
+        for i in items:
+            iter = model.get_iter(i)
+            self.configsublines[model.get_value(model.iter_parent(iter),2)].remove(model.get_value(iter,2))
+            model.remove(iter)
+        self.writeConfigFile()
+
     def getComboValue(self):
         combo = self.xml.get_widget("combobox1")
-        model = combo.get_model()
-        return model[combo.get_active()][0]
+        active = combo.get_active()
+        if active==-1:
+            return None
+        return combo.get_model()[active][0]
 
     def checkIsPrefix(self, path):
         ls = listdir(path)
@@ -521,10 +578,8 @@ class Main(object):
             if isdir(path):
                 if bool(self.winebin):
                     self.xml.get_widget("hbox1").set_property("sensitive", True)
-
                     t = self.checkIsPrefix(path)
                     b = self.autocreateprefix or t
-
                     self.xml.get_widget("button1").set_property("sensitive", b)
                     self.xml.get_widget("button8").set_property("sensitive", b)
                     self.xml.get_widget("button2").set_property("sensitive", b)
@@ -536,6 +591,8 @@ class Main(object):
                     self.env["WINEPREFIX"] = path
             else:
                 self.showError(eid,"Directory not found.")
+        if self.xml.get_widget("checkbutton1").get_property("active"):
+            self.addapp()
 
 
     def __quit(self,*args):
