@@ -1,8 +1,15 @@
+pywinery (0.1-8) testing; urgency=high
+
+  * Bugfix
+
+ -- spayder26 <spayder26@gmail.com>  Fri, 12 Nov 2010 18:10:00 +0000
 pywinery (0.1-7) testing; urgency=medium
 
-  * Make easier to manage prefixes.
+  * Added "Remember prefix for this app" option.
+  * Now is a lot easier to manage prefixes and known apps.
+  * Clearer interface.
 
- -- spayder26 <spayder26@gmail.com>  Sat, 09 Oct 2010 21:02:00 +0000
+ -- spayder26 <spayder26@gmail.com>  Sun, 10 Oct 2010 15:20:00 +0000
 pywinery (0.1-6) testing; urgency=high
 
   * Fixed error with wine's version numbers containing chars

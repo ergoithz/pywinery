@@ -9,7 +9,7 @@ XS-Python-Version: all
 
 Package: pywinery
 Architecture: all
-Depends: ${python:Depends}, python-glade2 (>=2.6), python-gtk2 (>=2.6), wine (>=0.9.50) | wine1.2
+Depends: ${python:Depends}, python-glade2 (>=2.6), python-gtk2 (>=2.6), wine (>=0.9.50) | wine1.2 | wine1.3
 Suggests: wine-doors
 XB-Python-Version: ${python:Versions}
 Description: Simple Wine multiple prefix manager, working as launcher or standalone application.
