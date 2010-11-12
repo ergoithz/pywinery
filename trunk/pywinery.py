@@ -327,7 +327,7 @@ class Main(object):
             combo.add_attribute(render, 'text', 2)
         a = {}
         p = -1
-        while p==-1 or len(a)!=len(self.configlines) or len(self.configlines)==-p:
+        while p==-1:# or len(a)!=len(self.configlines) or len(self.configlines)==-p:
             for i in self.configlines:
                 n = sep.join(i.split(sep)[p:])
                 if i not in a:
