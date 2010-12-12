@@ -50,7 +50,9 @@ def generate_tree(a,separator="/"):
                     p[j] = {}
                 p = p[j]
     n,tr = optimize_tree("",tree,sep=separator)
-    return {sep+n if n[0]!=sep else n:tr}
+    if n:
+        return {(sep+n if n[0]!=sep else n):tr}
+    return {}
 
 # Other convenience functions
 def rFalse(*a,**b):
@@ -251,8 +253,9 @@ class Main(object):
         f = open(self.configfile,"w")
         for i in self.configlines:
             f.write("%s%s" % ( i, linesep))
-            for j in self.configsublines[i]:
-                f.write(">%s%s" % ( j, linesep))
+            if i in self.configsublines:
+                for j in self.configsublines[i]:
+                    f.write(">%s%s" % ( j, linesep))
         f.close()
 
     def showError(self, id=None, message=None):
@@ -507,15 +510,17 @@ class Main(object):
             self.addfilenames([self.favprefix])
         dialog.hide()
 
-    def addfilenames(self,list):
-        if list:
+    def addfilenames(self,lista):
+        if lista:
             a = len(self.configlines)
-            self.configlines += list
+            self.configlines += lista
+            for i in lista:
+                self.configsublines[i] = []
             self.writeConfigFile()
             self.comboInit(auto=False)
             self.comboSet(self.configlines[-1])
             if self.configMode:
-                self.toggleConfig(visible)
+                self.toggleConfig(True)
 
     def removeprefix(self,*args):
         combo = self.xml.get_widget("combobox1")
