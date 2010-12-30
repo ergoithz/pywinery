@@ -143,7 +143,7 @@ class Main(object):
             self.wineversion = getWineVersion()
             self.autocreateprefix = self.wineversion > (1,)
             self.xml.get_widget("button13").set_property("visible",checkBin("wine-doors"))
-
+            self.xml.get_widget("button18").set_property("visible",checkBin("winetricks"))
 
         self.silent = False
         self.nodebug = False        #f.writelines([ i+linesep for i in self.configlines ])
@@ -221,6 +221,7 @@ class Main(object):
                "on_button13_clicked" : lambda x: self.execute("wine-doors"),
                "on_button16_clicked" : lambda x: self.toggleConfig(True),
                "on_button17_clicked" : self.removeapp,
+               "on_button18_clicked" : lambda x: self.execute("winetricks"),
                "on_button19_clicked" : lambda x: self.toggleConfig(False),
                "on_checkbutton1_toggled" : self.addapp,
                "on_dialog1_delete_event" : rFalse,
@@ -594,19 +595,18 @@ class Main(object):
                     self.xml.get_widget("button10").set_property("sensitive", not t)
                     self.xml.get_widget("button11").set_property("sensitive", b)
                     self.xml.get_widget("button13").set_property("sensitive", b)
+                    self.xml.get_widget("button18").set_property("sensitive", b)
                     self.env["WINEPREFIX"] = path
             else:
                 self.showError(eid,"Directory not found.")
         if self.xml.get_widget("checkbutton1").get_property("active"):
             self.addapp()
 
-
     def __quit(self,*args):
         for i in self.killable_threads:
             killPopen(i)
         if gtk.main_level()>0:
             gtk.main_quit()
-
 
     def createPrefix(self, path):
         if self.autocreateprefix:
@@ -650,12 +650,10 @@ class Main(object):
 
         for i in tohide:
             self.xml.get_widget(i).set_property("visible", False)
-
         self.xml.signal_autoconnect({"on_button9_clicked":terminate})
         self.xml.get_widget("progressbar1").set_fraction(0)
         self.xml.get_widget("label14").set_label("<b>%s</b>" % path)
         self.xml.get_widget("vbox10").set_property("visible",True)
-
         Thread(target=wait).start()
 
     def execute(self,command):
