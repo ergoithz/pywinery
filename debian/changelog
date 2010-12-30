@@ -1,3 +1,8 @@
+pywinery (0.1-11) testing; urgency=low
+
+  * Added winetricks button,  and fixed captions and sizes on options.
+
+ -- spayder26 <spayder26@gmail.com>  Thursday, 30 Dec 2010 18:55:00 +0000
 pywinery (0.1-10) testing; urgency=high
 
   * Bugfix
