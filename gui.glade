@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <glade-interface>
   <!-- interface-requires gtk+ 2.16 -->
   <!-- interface-naming-policy project-wide -->
@@ -136,28 +136,54 @@
                                         <property name="visible">True</property>
                                         <property name="homogeneous">True</property>
                                         <child>
-                                          <widget class="GtkButton" id="button13">
+                                          <widget class="GtkButton" id="button18">
+                                            <property name="visible">True</property>
                                             <property name="can_focus">True</property>
                                             <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Winetricks</property>
                                             <property name="relief">none</property>
-                                            <signal name="clicked" handler="on_button13_clicked"/>
+                                            <signal name="clicked" handler="on_button18_clicked"/>
                                             <child>
-                                              <widget class="GtkVBox" id="vbox9">
+                                              <widget class="GtkVBox" id="vbox18">
                                                 <property name="visible">True</property>
                                                 <child>
-                                                  <widget class="GtkImage" id="image17">
+                                                  <widget class="GtkAspectFrame" id="aspectframe6">
                                                     <property name="visible">True</property>
-                                                    <property name="icon_name">wine-doors</property>
-                                                    <property name="icon-size">5</property>
+                                                    <property name="label_xalign">0</property>
+                                                    <property name="shadow_type">none</property>
+                                                    <child>
+                                                      <widget class="GtkFixed" id="fixed4">
+                                                        <property name="width_request">32</property>
+                                                        <property name="height_request">32</property>
+                                                        <property name="visible">True</property>
+                                                        <child>
+                                                          <widget class="GtkImage" id="image18">
+                                                            <property name="visible">True</property>
+                                                            <property name="pixel_size">32</property>
+                                                            <property name="icon_name">gtk-add</property>
+                                                            <property name="icon-size">5</property>
+                                                          </widget>
+                                                        </child>
+                                                        <child>
+                                                          <widget class="GtkImage" id="image19">
+                                                            <property name="visible">True</property>
+                                                            <property name="pixel_size">16</property>
+                                                            <property name="icon_name">wine</property>
+                                                            <property name="icon-size">5</property>
+                                                          </widget>
+                                                        </child>
+                                                      </widget>
+                                                    </child>
                                                   </widget>
                                                   <packing>
+                                                    <property name="expand">False</property>
                                                     <property name="position">0</property>
                                                   </packing>
                                                 </child>
                                                 <child>
-                                                  <widget class="GtkLabel" id="label11">
-                                                    <property name="visible">True</property>
-                                                    <property name="label" translatable="yes">Wine-doors</property>
+                                                  <widget class="GtkLabel" id="label9">
+                                                    <property name="yalign">1</property>
+                                                    <property name="label" translatable="yes">Winetricks</property>
                                                     <property name="justify">center</property>
                                                   </widget>
                                                   <packing>
@@ -173,29 +199,34 @@
                                           </packing>
                                         </child>
                                         <child>
-                                          <widget class="GtkButton" id="button2">
-                                            <property name="visible">True</property>
+                                          <widget class="GtkButton" id="button13">
                                             <property name="can_focus">True</property>
                                             <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Wine-doors</property>
                                             <property name="relief">none</property>
-                                            <signal name="clicked" handler="on_button2_clicked"/>
+                                            <signal name="clicked" handler="on_button13_clicked"/>
                                             <child>
-                                              <widget class="GtkVBox" id="vbox3">
+                                              <widget class="GtkVBox" id="vbox9">
                                                 <property name="visible">True</property>
                                                 <child>
-                                                  <widget class="GtkImage" id="image2">
+                                                  <widget class="GtkImage" id="image17">
+                                                    <property name="width_request">32</property>
+                                                    <property name="height_request">32</property>
                                                     <property name="visible">True</property>
-                                                    <property name="icon_name">wine-winecfg</property>
+                                                    <property name="pixel_size">32</property>
+                                                    <property name="icon_name">wine-doors</property>
                                                     <property name="icon-size">5</property>
                                                   </widget>
                                                   <packing>
+                                                    <property name="expand">False</property>
                                                     <property name="position">0</property>
                                                   </packing>
                                                 </child>
                                                 <child>
-                                                  <widget class="GtkLabel" id="label3">
+                                                  <widget class="GtkLabel" id="label11">
                                                     <property name="visible">True</property>
-                                                    <property name="label" translatable="yes">Winecfg</property>
+                                                    <property name="yalign">1</property>
+                                                    <property name="label" translatable="yes">Wine-doors</property>
                                                     <property name="justify">center</property>
                                                   </widget>
                                                   <packing>
@@ -211,10 +242,55 @@
                                           </packing>
                                         </child>
                                         <child>
+                                          <widget class="GtkButton" id="button2">
+                                            <property name="visible">True</property>
+                                            <property name="can_focus">True</property>
+                                            <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Wine configuration</property>
+                                            <property name="relief">none</property>
+                                            <signal name="clicked" handler="on_button2_clicked"/>
+                                            <child>
+                                              <widget class="GtkVBox" id="vbox3">
+                                                <property name="visible">True</property>
+                                                <child>
+                                                  <widget class="GtkImage" id="image2">
+                                                    <property name="width_request">32</property>
+                                                    <property name="height_request">32</property>
+                                                    <property name="visible">True</property>
+                                                    <property name="pixel_size">32</property>
+                                                    <property name="icon_name">wine-winecfg</property>
+                                                    <property name="icon-size">5</property>
+                                                  </widget>
+                                                  <packing>
+                                                    <property name="expand">False</property>
+                                                    <property name="position">0</property>
+                                                  </packing>
+                                                </child>
+                                                <child>
+                                                  <widget class="GtkLabel" id="label3">
+                                                    <property name="visible">True</property>
+                                                    <property name="yalign">1</property>
+                                                    <property name="label" translatable="yes">Winecfg</property>
+                                                    <property name="justify">center</property>
+                                                  </widget>
+                                                  <packing>
+                                                    <property name="position">1</property>
+                                                  </packing>
+                                                </child>
+                                              </widget>
+                                            </child>
+                                          </widget>
+                                          <packing>
+                                            <property name="expand">False</property>
+                                            <property name="position">2</property>
+                                          </packing>
+                                        </child>
+                                        <child>
                                           <widget class="GtkButton" id="button11">
                                             <property name="visible">True</property>
                                             <property name="can_focus">True</property>
                                             <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Wine DOS</property>
                                             <property name="relief">none</property>
                                             <signal name="clicked" handler="on_button11_clicked"/>
                                             <child>
@@ -227,10 +303,13 @@
                                                     <property name="shadow_type">none</property>
                                                     <child>
                                                       <widget class="GtkFixed" id="fixed3">
+                                                        <property name="width_request">32</property>
+                                                        <property name="height_request">32</property>
                                                         <property name="visible">True</property>
                                                         <child>
                                                           <widget class="GtkImage" id="image14">
                                                             <property name="visible">True</property>
+                                                            <property name="pixel_size">32</property>
                                                             <property name="icon_name">terminal</property>
                                                             <property name="icon-size">5</property>
                                                           </widget>
@@ -238,23 +317,23 @@
                                                         <child>
                                                           <widget class="GtkImage" id="image13">
                                                             <property name="visible">True</property>
+                                                            <property name="pixel_size">16</property>
                                                             <property name="icon_name">wine</property>
                                                             <property name="icon-size">5</property>
                                                           </widget>
-                                                          <packing>
-                                                            <property name="x">-9</property>
-                                                          </packing>
                                                         </child>
                                                       </widget>
                                                     </child>
                                                   </widget>
                                                   <packing>
+                                                    <property name="expand">False</property>
                                                     <property name="position">0</property>
                                                   </packing>
                                                 </child>
                                                 <child>
                                                   <widget class="GtkLabel" id="label1">
                                                     <property name="visible">True</property>
+                                                    <property name="yalign">1</property>
                                                     <property name="label" translatable="yes">Console</property>
                                                     <property name="justify">center</property>
                                                   </widget>
@@ -266,7 +345,7 @@
                                             </child>
                                           </widget>
                                           <packing>
-                                            <property name="position">2</property>
+                                            <property name="position">3</property>
                                           </packing>
                                         </child>
                                         <child>
@@ -274,6 +353,7 @@
                                             <property name="visible">True</property>
                                             <property name="can_focus">True</property>
                                             <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Wine application uninstaller</property>
                                             <property name="relief">none</property>
                                             <signal name="clicked" handler="on_button5_clicked"/>
                                             <child>
@@ -281,58 +361,24 @@
                                                 <property name="visible">True</property>
                                                 <child>
                                                   <widget class="GtkImage" id="image5">
+                                                    <property name="width_request">32</property>
+                                                    <property name="height_request">32</property>
                                                     <property name="visible">True</property>
+                                                    <property name="pixel_size">32</property>
                                                     <property name="icon_name">wine-uninstaller</property>
                                                     <property name="icon-size">5</property>
                                                   </widget>
                                                   <packing>
+                                                    <property name="expand">False</property>
                                                     <property name="position">0</property>
                                                   </packing>
                                                 </child>
                                                 <child>
                                                   <widget class="GtkLabel" id="label5">
                                                     <property name="visible">True</property>
+                                                    <property name="yalign">1</property>
                                                     <property name="label" translatable="yes">Uninstaller</property>
                                                     <property name="justify">center</property>
-                                                  </widget>
-                                                  <packing>
-                                                    <property name="position">1</property>
-                                                  </packing>
-                                                </child>
-                                              </widget>
-                                            </child>
-                                          </widget>
-                                          <packing>
-                                            <property name="expand">False</property>
-                                            <property name="position">3</property>
-                                          </packing>
-                                        </child>
-                                        <child>
-                                          <widget class="GtkButton" id="button4">
-                                            <property name="visible">True</property>
-                                            <property name="can_focus">True</property>
-                                            <property name="receives_default">True</property>
-                                            <property name="relief">none</property>
-                                            <signal name="clicked" handler="on_button4_clicked"/>
-                                            <child>
-                                              <widget class="GtkVBox" id="vbox4">
-                                                <property name="visible">True</property>
-                                                <child>
-                                                  <widget class="GtkImage" id="image4">
-                                                    <property name="visible">True</property>
-                                                    <property name="icon_name">wine-winefile</property>
-                                                    <property name="icon-size">5</property>
-                                                  </widget>
-                                                  <packing>
-                                                    <property name="position">0</property>
-                                                  </packing>
-                                                </child>
-                                                <child>
-                                                  <widget class="GtkLabel" id="label4">
-                                                    <property name="visible">True</property>
-                                                    <property name="label" translatable="yes">File browser</property>
-                                                    <property name="justify">center</property>
-                                                    <property name="wrap">True</property>
                                                   </widget>
                                                   <packing>
                                                     <property name="position">1</property>
@@ -347,37 +393,39 @@
                                           </packing>
                                         </child>
                                         <child>
-                                          <widget class="GtkButton" id="button10">
+                                          <widget class="GtkButton" id="button4">
                                             <property name="visible">True</property>
                                             <property name="can_focus">True</property>
                                             <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Wine explorer</property>
                                             <property name="relief">none</property>
-                                            <signal name="clicked" handler="on_button10_clicked"/>
+                                            <signal name="clicked" handler="on_button4_clicked"/>
                                             <child>
-                                              <widget class="GtkVBox" id="vbox6">
+                                              <widget class="GtkVBox" id="vbox4">
                                                 <property name="visible">True</property>
                                                 <child>
-                                                  <widget class="GtkAspectFrame" id="aspectframe3">
+                                                  <widget class="GtkAspectFrame" id="aspectframe7">
                                                     <property name="visible">True</property>
                                                     <property name="label_xalign">0</property>
                                                     <property name="shadow_type">none</property>
                                                     <child>
-                                                      <widget class="GtkFixed" id="fixed1">
+                                                      <widget class="GtkFixed" id="fixed5">
+                                                        <property name="width_request">32</property>
+                                                        <property name="height_request">32</property>
                                                         <property name="visible">True</property>
                                                         <child>
-                                                          <widget class="GtkImage" id="image10">
+                                                          <widget class="GtkImage" id="image4">
                                                             <property name="visible">True</property>
-                                                            <property name="icon_name">wine</property>
+                                                            <property name="pixel_size">32</property>
+                                                            <property name="icon_name">gtk-directory</property>
                                                             <property name="icon-size">5</property>
                                                           </widget>
-                                                          <packing>
-                                                            <property name="x">-9</property>
-                                                          </packing>
                                                         </child>
                                                         <child>
-                                                          <widget class="GtkImage" id="image11">
+                                                          <widget class="GtkImage" id="image20">
                                                             <property name="visible">True</property>
-                                                            <property name="stock">gtk-add</property>
+                                                            <property name="pixel_size">16</property>
+                                                            <property name="icon_name">wine</property>
                                                             <property name="icon-size">5</property>
                                                           </widget>
                                                         </child>
@@ -389,10 +437,12 @@
                                                   </packing>
                                                 </child>
                                                 <child>
-                                                  <widget class="GtkLabel" id="label6">
+                                                  <widget class="GtkLabel" id="label4">
                                                     <property name="visible">True</property>
-                                                    <property name="label" translatable="yes">Initialize prefix</property>
+                                                    <property name="yalign">1</property>
+                                                    <property name="label" translatable="yes">File browser</property>
                                                     <property name="justify">center</property>
+                                                    <property name="wrap">True</property>
                                                   </widget>
                                                   <packing>
                                                     <property name="position">1</property>
@@ -407,39 +457,40 @@
                                           </packing>
                                         </child>
                                         <child>
-                                          <widget class="GtkButton" id="button3">
+                                          <widget class="GtkButton" id="button10">
                                             <property name="visible">True</property>
                                             <property name="can_focus">True</property>
                                             <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Initialize prefix</property>
                                             <property name="relief">none</property>
-                                            <signal name="clicked" handler="on_button3_clicked"/>
+                                            <signal name="clicked" handler="on_button10_clicked"/>
                                             <child>
-                                              <widget class="GtkVBox" id="vbox7">
+                                              <widget class="GtkVBox" id="vbox6">
                                                 <property name="visible">True</property>
                                                 <child>
-                                                  <widget class="GtkAspectFrame" id="aspectframe4">
+                                                  <widget class="GtkAspectFrame" id="aspectframe3">
                                                     <property name="visible">True</property>
                                                     <property name="label_xalign">0</property>
                                                     <property name="shadow_type">none</property>
                                                     <child>
-                                                      <widget class="GtkFixed" id="fixed2">
+                                                      <widget class="GtkFixed" id="fixed1">
+                                                        <property name="width_request">32</property>
+                                                        <property name="height_request">32</property>
                                                         <property name="visible">True</property>
                                                         <child>
-                                                          <widget class="GtkImage" id="image12">
+                                                          <widget class="GtkImage" id="image11">
                                                             <property name="visible">True</property>
-                                                            <property name="stock">gtk-directory</property>
+                                                            <property name="stock">gtk-new</property>
                                                             <property name="icon-size">5</property>
                                                           </widget>
                                                         </child>
                                                         <child>
-                                                          <widget class="GtkImage" id="image3">
+                                                          <widget class="GtkImage" id="image10">
                                                             <property name="visible">True</property>
+                                                            <property name="pixel_size">16</property>
                                                             <property name="icon_name">wine</property>
                                                             <property name="icon-size">5</property>
                                                           </widget>
-                                                          <packing>
-                                                            <property name="x">-9</property>
-                                                          </packing>
                                                         </child>
                                                       </widget>
                                                     </child>
@@ -449,9 +500,10 @@
                                                   </packing>
                                                 </child>
                                                 <child>
-                                                  <widget class="GtkLabel" id="label7">
+                                                  <widget class="GtkLabel" id="label6">
                                                     <property name="visible">True</property>
-                                                    <property name="label" translatable="yes">Directory</property>
+                                                    <property name="yalign">1</property>
+                                                    <property name="label" translatable="yes">Initialize prefix</property>
                                                     <property name="justify">center</property>
                                                   </widget>
                                                   <packing>
@@ -464,6 +516,69 @@
                                           <packing>
                                             <property name="expand">False</property>
                                             <property name="position">6</property>
+                                          </packing>
+                                        </child>
+                                        <child>
+                                          <widget class="GtkButton" id="button3">
+                                            <property name="visible">True</property>
+                                            <property name="can_focus">True</property>
+                                            <property name="receives_default">True</property>
+                                            <property name="tooltip" translatable="yes">Open prefix directory</property>
+                                            <property name="relief">none</property>
+                                            <signal name="clicked" handler="on_button3_clicked"/>
+                                            <child>
+                                              <widget class="GtkVBox" id="vbox7">
+                                                <property name="visible">True</property>
+                                                <child>
+                                                  <widget class="GtkAspectFrame" id="aspectframe4">
+                                                    <property name="visible">True</property>
+                                                    <property name="label_xalign">0</property>
+                                                    <property name="shadow_type">none</property>
+                                                    <child>
+                                                      <widget class="GtkFixed" id="fixed2">
+                                                        <property name="width_request">32</property>
+                                                        <property name="height_request">32</property>
+                                                        <property name="visible">True</property>
+                                                        <child>
+                                                          <widget class="GtkImage" id="image12">
+                                                            <property name="visible">True</property>
+                                                            <property name="pixel_size">32</property>
+                                                            <property name="icon_name">gtk-directory</property>
+                                                            <property name="icon-size">5</property>
+                                                          </widget>
+                                                        </child>
+                                                        <child>
+                                                          <widget class="GtkImage" id="image3">
+                                                            <property name="visible">True</property>
+                                                            <property name="pixel_size">16</property>
+                                                            <property name="icon_name">wine</property>
+                                                            <property name="icon-size">5</property>
+                                                          </widget>
+                                                        </child>
+                                                      </widget>
+                                                    </child>
+                                                  </widget>
+                                                  <packing>
+                                                    <property name="position">0</property>
+                                                  </packing>
+                                                </child>
+                                                <child>
+                                                  <widget class="GtkLabel" id="label7">
+                                                    <property name="visible">True</property>
+                                                    <property name="yalign">1</property>
+                                                    <property name="label" translatable="yes">Directory</property>
+                                                    <property name="justify">center</property>
+                                                  </widget>
+                                                  <packing>
+                                                    <property name="position">1</property>
+                                                  </packing>
+                                                </child>
+                                              </widget>
+                                            </child>
+                                          </widget>
+                                          <packing>
+                                            <property name="expand">False</property>
+                                            <property name="position">7</property>
                                           </packing>
                                         </child>
                                       </widget>
@@ -933,7 +1048,6 @@
     <property name="resizable">False</property>
     <property name="icon_name">gtk-dialog-question</property>
     <property name="type_hint">dialog</property>
-    <property name="has_separator">False</property>
     <signal name="delete_event" handler="on_dialog1_delete_event"/>
     <child internal-child="vbox">
       <widget class="GtkVBox" id="dialog-vbox1">
