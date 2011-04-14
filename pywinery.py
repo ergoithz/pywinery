@@ -109,6 +109,36 @@ class ErrorManager(object):
     def isEmpty(self):
         return len(self.__l)==0
 
+class GTuple(gobject.GObject):
+    tup = None
+    def __init__(self,tup):
+        gobject.GObject.__init__(self)
+        self.tup = tup
+
+def getTools():
+    checked = (
+        "wine",
+        )
+    tools = {
+        "Winetricks": ("wine-winetricks",("winetricks",),False),
+        "Winecfg": ("wine-winecfg",("winecfg",),False),
+        "Wine cmd":("terminal",("x-terminal-emulator","-e", "env", "WINEPREFIX=$WINEPREFIX", "wine","cmd"),False),
+        "Wine uninstaller":("wine-uninstaller",("wine","uninstaller"),False),
+        "Winefile":("wine",("wine","explorer"),False),
+        "Wine regedit":("wine",("wine","regedit"),False),
+        "Browse prefix folder":("gtk-directory",("xdg-open","$WINEPREFIX"),True),
+        }
+    theme = gtk.icon_theme_get_default()
+    model = gtk.ListStore(gtk.gdk.Pixbuf, str, GTuple, bool)
+    for i in tools:
+        bin = tools[i][1][0]
+        if bin in checked or checkBin(bin):
+            model.append(
+                (theme.load_icon(tools[i][0], 24, 0),i,
+                    GTuple((getBin(tools[i][1][0]),)+tools[i][1][1:]),
+                    tools[i][2]))
+    return model
+
 class Main(object):
     def __init__(self, args=None):
         if args==None:
@@ -204,6 +234,11 @@ class Main(object):
         self.xml.get_widget("vbox15").set_property("visible", self.zig and not self.msi)
 
         self.comboInit()
+        iconview = self.xml.get_widget("iconview1")
+        iconview.set_model(getTools())
+        iconview.set_pixbuf_column(0)
+        iconview.set_text_column(1)
+
         dic = {"on_window1_destroy" : self.__quit,
                "on_button12_clicked" : self.__quit,
                "on_combobox1_changed" : self.combochange,
@@ -212,24 +247,21 @@ class Main(object):
                "on_button7_clicked" : self.removeprefix,
                "on_button1_clicked" : self.runAndExit,
                "on_button8_clicked" : lambda x: (self.execute([self.winebin,"msiexec","/i",self.msi]), self.__quit()),
-               "on_button2_clicked" : lambda x: self.execute("winecfg"),
-               "on_button4_clicked" : lambda x: self.execute("winefile"),
-               "on_button5_clicked" : lambda x: self.execute([self.winebin,"uninstaller"]),
-               "on_button3_clicked" : lambda x: self.execute(["xdg-open",self.getComboValue()]),
-               "on_button10_clicked" : self.createPrefix,
-               "on_button11_clicked" : lambda x: self.execute(["xterm","-e","wine","cmd"]),
-               "on_button13_clicked" : lambda x: self.execute("wine-doors"),
                "on_button16_clicked" : lambda x: self.toggleConfig(True),
                "on_button17_clicked" : self.removeapp,
-               "on_button18_clicked" : lambda x: self.execute("winetricks"),
                "on_button19_clicked" : lambda x: self.toggleConfig(False),
                "on_checkbutton1_toggled" : self.addapp,
                "on_dialog1_delete_event" : rFalse,
+               "on_iconview1_item_activated" : self.iconview_activated,
             }
         self.xml.signal_autoconnect(dic)
         self.env = environ.copy()
         if self.nodebug:
             self.env["WINEDEBUG"] = "-all"
+
+    def iconview_activated(self, iconview, path):
+        model = iconview.get_model()
+        self.execute(model.get_value(model.get_iter(path), 2).tup)
 
     def readConfigFile(self):
         if isfile(self.configfile):
@@ -559,15 +591,14 @@ class Main(object):
     def getComboValue(self):
         combo = self.xml.get_widget("combobox1")
         active = combo.get_active()
-        if active==-1:
-            return None
+        if active==-1: return None
         return combo.get_model()[active][0]
 
     def checkIsPrefix(self, path):
+        if not isdir(path): return False
         ls = listdir(path)
         for i in ("drive_c","dosdevices","user.reg","system.reg","userdef.reg"):
-            if i not in ls:
-                return False
+            if i not in ls: return False
         return True
 
     def combochange(self,*args):
@@ -575,27 +606,13 @@ class Main(object):
         self.hideError(eid)
 
         a = bool(self.xml.get_widget("combobox1").get_active() > -1)
-        self.xml.get_widget("button1").set_property("sensitive", False)
-        self.xml.get_widget("button8").set_property("sensitive", False)
-        self.xml.get_widget("button7").set_property("sensitive", False)
-        self.xml.get_widget("hbox1").set_property("sensitive", False)
+        self.xml.get_widget("iconview1").set_property("sensitive", False)
         if a:
             self.xml.get_widget("button7").set_property("sensitive", True)
             path = self.getComboValue()
             if isdir(path):
                 if bool(self.winebin):
-                    self.xml.get_widget("hbox1").set_property("sensitive", True)
-                    t = self.checkIsPrefix(path)
-                    b = self.autocreateprefix or t
-                    self.xml.get_widget("button1").set_property("sensitive", b)
-                    self.xml.get_widget("button8").set_property("sensitive", b)
-                    self.xml.get_widget("button2").set_property("sensitive", b)
-                    self.xml.get_widget("button4").set_property("sensitive", b)
-                    self.xml.get_widget("button5").set_property("sensitive", b)
-                    self.xml.get_widget("button10").set_property("sensitive", not t)
-                    self.xml.get_widget("button11").set_property("sensitive", b)
-                    self.xml.get_widget("button13").set_property("sensitive", b)
-                    self.xml.get_widget("button18").set_property("sensitive", b)
+                    self.xml.get_widget("iconview1").set_property("sensitive", True)
                     self.env["WINEPREFIX"] = path
             else:
                 self.showError(eid,"Directory not found.")
@@ -657,7 +674,7 @@ class Main(object):
         Thread(target=wait).start()
 
     def execute(self,command):
-        return Popen(command, env=self.env)
+        return Popen((i.replace("$WINEPREFIX",self.env["WINEPREFIX"]) for i in command), env=self.env)
 
 if len(sys_argv)>1 and sys_argv[1] in ("--help","-h"):
     print '''pywinery - an easy graphical tool for wineprefixing
