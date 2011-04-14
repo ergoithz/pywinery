@@ -1,5 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+'''
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+'''
+__version__ = (0, 1, 12)
+__author__ = "spayder26 <spayder26@gmail.com>"
+
 from sys import exit as sys_exit, argv as sys_argv
 try:
     import pygtk
@@ -26,7 +43,7 @@ from time import sleep, time
 from exceptions import ValueError
 
 # Tree recursive functions
-def optimize_tree(name,node,flag=True,sep="/"):
+def optimize_tree(name, node, flag=True, sep="/"):
     r = {}
     if node:
         if len(node)==1 and flag:
@@ -38,9 +55,14 @@ def optimize_tree(name,node,flag=True,sep="/"):
         for i in node:
             j,k = optimize_tree(i,node[i],flag,sep)
             r[j] = k
-    return (name,r)
+    return (name, r)
 
 def generate_tree(a,separator="/"):
+    '''
+        Receives a list of elements, and try to uniquely identify them by its
+        url's shorter last significant part.
+        Returns a dictionary of significants and full urls.
+    '''
     tree = {}
     for i in a:
         p = tree
@@ -55,15 +77,12 @@ def generate_tree(a,separator="/"):
     return {}
 
 # Other convenience functions
-def rFalse(*a,**b):
-    return False
+def rFalse(*a,**b): return False
 
 # Enviroment's detection and actions
-def getBin(name):
-    return getoutput("which %s" % name).strip()
+def getBin(name): return getoutput("which %s" % name).strip()
 
-def checkBin(name):
-    return bool(getBin(name))
+def checkBin(name): return bool(getBin(name))
 
 def killPopen(p, signal=15):
     if hasattr(p, "send_signal"):
@@ -110,12 +129,22 @@ class ErrorManager(object):
         return len(self.__l)==0
 
 class GTuple(gobject.GObject):
+    '''
+    Custom gobject type to store any value.
+    Used getTools to return a gtk.TreeModel compatible model.
+    '''
     tup = None
     def __init__(self,tup):
         gobject.GObject.__init__(self)
         self.tup = tup
 
 def getTools():
+    '''
+    Returns a model of found  prefix-related tools using the following row
+    format:
+        ( icon_pixbuf, icon_text, GTuple( executable_path, *arguments ),
+        unused Bool )
+    '''
     checked = (
         "wine",
         )
@@ -134,7 +163,7 @@ def getTools():
         bin = tools[i][1][0]
         if bin in checked or checkBin(bin):
             model.append(
-                (theme.load_icon(tools[i][0], 24, 0),i,
+                (theme.load_icon(tools[i][0], 24, 0), i,
                     GTuple((getBin(tools[i][1][0]),)+tools[i][1][1:]),
                     tools[i][2]))
     return model
@@ -677,16 +706,22 @@ class Main(object):
         return Popen((i.replace("$WINEPREFIX",self.env["WINEPREFIX"]) for i in command), env=self.env)
 
 if len(sys_argv)>1 and sys_argv[1] in ("--help","-h"):
-    print '''pywinery - an easy graphical tool for wineprefixing
+    print '''%s - an easy graphical tool for wineprefixing.
     Usage:
         pywinery [OPTIONS...] FILE [ARGs...]  Call an exe with wine.
 
     Options:
+        -v, --version     Prints Wine and Pywinery's version.
         -x, --nogui       Run with autodetected prefix if possible.
         -s, --silent      Hide winedebug messages.
-        -c, --config      Run as configuration mode
+        -c, --config      Force run as configuration mode.
         -h, --help        Show this help.
-    '''
+    ''' % sys_argv[0]
+elif len(sys_argv)>1 and sys_argv[1] in ("--version","-v"):
+    print "Pywinery %s, wine %s." % (
+        ".".join(str(i) for i in __version__),
+        ".".join(str(i) for i in getWineVersion())
+        )
 else:
     if __name__ == "__main__":
         app = Main(sys_argv)
