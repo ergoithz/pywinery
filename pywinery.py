@@ -14,10 +14,10 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
-__version__ = (0, 1, 12)
-__author__ = "spayder26 <spayder26@gmail.com>"
+__version__ = (0, 2, 0)
+__author__ = "Felipe A. Hernandez <spayder26@gmail.com>"
 
-from sys import exit as sys_exit, argv as sys_argv
+from sys import exit as sys_exit, argv as sys_argv, stderr
 try:
     import pygtk
     pygtk.require("2.0")
@@ -32,57 +32,110 @@ try:
 except:
     sys_exit(1)
 
-from os.path import realpath, split as path_split, join as path_join, isfile, isdir, expandvars, dirname, exists
-from os import environ, listdir, sep, linesep, kill as os_kill
+from os.path import realpath, abspath, split as path_split, join as path_join,\
+    isfile, isdir, islink, isabs, expandvars, dirname, exists
+from os import environ, listdir, sep, linesep, kill  as os_kill, getuid,\
+    getgid, remove, mkdir, symlink, access, X_OK
+
 from commands import getoutput
 from subprocess import Popen
-from distutils.dir_util import mkpath
 from mimetypes import guess_type
 from threading import Thread
 from time import sleep, time
 from exceptions import ValueError
 
-# Tree recursive functions
-def optimize_tree(name, node, flag=True, sep="/"):
-    r = {}
-    if node:
-        if len(node)==1 and flag:
-            subnode = node.values()[0]
-            if subnode:
-                return optimize_tree(name+sep+node.keys()[0],subnode,True,sep)
-        if sep in name:
-            flag = 0
-        for i in node:
-            j,k = optimize_tree(i,node[i],flag,sep)
-            r[j] = k
-    return (name, r)
+from shutil import rmtree
 
-def generate_tree(a,separator="/"):
-    '''
-        Receives a list of elements, and try to uniquely identify them by its
-        url's shorter last significant part.
-        Returns a dictionary of significants and full urls.
-    '''
-    tree = {}
-    for i in a:
-        p = tree
-        for j in i.split(sep):
-            if j:
-                if not j in p:
-                    p[j] = {}
-                p = p[j]
-    n,tr = optimize_tree("",tree,sep=separator)
-    if n:
-        return {(sep+n if n[0]!=sep else n):tr}
-    return {}
+def mkpath(path):
+    path = path.split(sep)
+    unfinished = ""
+    for i in path:
+        unfinished += "%s%s" % (i, sep)
+        if not isdir(unfinished):
+            mkdir(unfinished)
+            
+def relativize(path, prefix):
+    path = abspath(path)
+    home = environ["HOME"]
+    if home[-1] == sep: home = home[:-1]
+    for old, new in ((prefix.path, ""), (realpath(prefix.path), ""), (home, "$HOME")):
+        if path.startswith(old): return "%s%s%s" % (new, sep if new else "", path[len(old)+1:])
+    return path
+    
+def unrelativize(path, prefix):
+    path = expandvars(path)
+    if isabs(path): return path
+    return path_join(prefix.path, path)
+    
+def getPrefixes(defaults):
+    configdir = expandvars("$HOME/.config/pywinery")
+    newdir = expandvars("$HOME/.local/share/wineprefixes")
+    old =  path_join(configdir, "prefixes.config")
+    if not isdir(newdir): mkpath(newdir)
+    #if not isdir(configdir): mkpath(configdir)
+    if isfile(old):
+        # Load prefixes with exe lists
+        f = open(old,"r")
+        configlines = {}
+        lastconfigline = None
+        for i in f.readlines():
+            si = i.strip()
+            if si:
+                if si[0]==">":
+                    if lastconfigline:
+                        configlines[lastconfigline].append(si[1:].strip())
+                else:
+                    lastconfigline = si
+                    configlines[si] = []
+        f.close()
+        
+        # Skip prefixes already in newdir but update cfg with execs
+        for i in listdir(newdir):
+            rpath = realpath(path_join(newdir, i))
+            for j in configlines.keys():
+                if realpath(j) == rpath:
+                    prefix = Prefix(rpath, defaults)
+                    prefix.extend_known_executables(configlines[j])
+                    del configlines[j]
+                
+        # Newdir prefix linking   
+        for key, values in configlines.iteritems():
+            if isdir(key): # We cannot import broken prefixes
+                end = key.split(sep)[-1]                
+                prefix = Prefix(key, defaults)
+                prefix["ww_name"] = end
+                prefix.extend_known_executables(configlines[j])
+                prefix.memorize()
+        remove(old)
 
-# Other convenience functions
-def rFalse(*a,**b): return False
+    #TODO: ignore behavior
+    tr = []
+    for i in listdir(newdir):
+        apath = abspath(path_join(newdir, i))
+        rpath = realpath(path_join(newdir, i))
+        if isdir(rpath):
+            prefix = Prefix(apath, defaults)
+            if prefix["ww_ignore"]: continue
+            tr.append(prefix)
+        else: tr.append(BrokenPrefix(apath, defaults))
+    return tr
+
+def namer(path):
+    ''' Receives a path and returns an alternative if alredy exists '''
+    temptative = path
+    counter = 1
+    while exists(temptative):
+        counter += 1
+        temptative = "%s_%d" % (path, counter)
+    return temptative
 
 # Enviroment's detection and actions
-def getBin(name): return getoutput("which %s" % name).strip()
+def getBin(name):
+    return getoutput("which %s" % name).strip() or None
 
-def checkBin(name): return bool(getBin(name))
+def checkBin(name):
+    if exists(name) and access(name, X_OK): return True
+    return bool(getBin(name))
 
 def killPopen(p, signal=15):
     if hasattr(p, "send_signal"):
@@ -90,43 +143,61 @@ def killPopen(p, signal=15):
     else:
         # For python < 2.6
         os_kill(p.pid, signal)
+        
+def toolModel( winepath = "wine", wineprefix = "",  model = None ):
+    '''
+    Returns a model of found  prefix-related tools using the following row
+    format:
+        ( icon_pixbuf, icon_text, GTuple( executable_path, *arguments ))
+    '''
+    # tools format:
+    #   text : (list of options...)
+    # option format:
+    #   (icon_name, required_binaries, command, WTF)    
+    tools = { 
+        "Winetricks":(
+            ("wine-winetricks", ("winetricks",), ("winetricks",)),),
+        "Winecfg":(
+            ("wine-winecfg", (winepath,), (winepath, "winecfg",)),),
+        "Wine cmd":(
+            ("terminal", ("x-terminal-emulator", winepath,), (
+                "x-terminal-emulator","-e", winepath, "cmd")),
+            ("terminal", ("xterm", winepath,), (
+                "xterm","-e", winepath, "cmd")),
+            ),
+        "Wine uninstaller":(
+            ("wine-uninstaller", (winepath,), (winepath, "uninstaller")),),
+        "Wine explorer":(
+            ("wine", (winepath,), (winepath, "explorer")),),
+        "Wine regedit":(
+            ("wine", (winepath,), (winepath, "regedit")),),
+        "Browse prefix folder":(
+            ("gtk-directory", ("xdg-open",), ("xdg-open","%s" % wineprefix)),),
+        }
+    theme = gtk.icon_theme_get_default()
+    if model is None: model = gtk.ListStore(gtk.gdk.Pixbuf, str, GTuple)
+    for text in tools:
+        for icon_name, requirements, command in tools[text]:
+            valid_option = True
+            for i in requirements:
+                if not checkBin(i):
+                    valid_option = False
+                    break
+            if valid_option:
+                icon = "gtk-missing-image"
+                try:
+                    if theme.has_icon(icon_name): icon = icon_name
+                except: pass
+                model.append((
+                    theme.load_icon(icon, 24, 0),
+                    text,
+                    GTuple((getBin(command[0]),)+command[1:])))
+                break
+    return model
 
-def getWineVersion():
-    a = getoutput("wine --version")
-    v = a.strip().split("-")[1].split(".")
-    tr = [0]*len(v)
-    for i in xrange(len(tr)):
-        try:
-            tr[i] = int(v[i])
-        except:
-            pass
-    return tuple(tr)
-
-# Auxiliar classes
 class LoopHalt(Exception):
     def __str__(self):
         return "Loop halted"
-
-class ErrorManager(object):
-    def __init__(self):
-        self.__d = {}
-        self.__l = []
-
-    def add(self, id, message):
-        self.__d[id] = message
-        self.__l.append(id)
-
-    def remove(self, id):
-        while id in self.__l:
-            self.__l.remove(id)
-
-    def last(self):
-        if self.isEmpty():
-            return None
-        return self.__d[self.__l[-1]]
-
-    def isEmpty(self):
-        return len(self.__l)==0
 
 class GTuple(gobject.GObject):
     '''
@@ -134,594 +205,919 @@ class GTuple(gobject.GObject):
     Used getTools to return a gtk.TreeModel compatible model.
     '''
     tup = None
-    def __init__(self,tup):
+    def __init__(self, tup):
         gobject.GObject.__init__(self)
         self.tup = tup
+    
+class BrokenPrefix(object):
+    def __init__(self, path, defaults):
+        self.winepath = None
+        self.path = path
+        self.defaults = defaults
+        self.known_executables = ()
+        self.imported = True # Only imported prefixes can be broken
+        
+    def knows_executable(self, x):
+        return False
+        
+    def add_known_executable(self, x):
+        pass
+        
+    def remove_known_executable(self, x):
+        pass
+        
+    def extend_known_executables(self, x):
+        pass
+        
+    def __setitem__(self, x, y):
+        pass
+        
+    def __getitem__(self, x):
+        return self.defaults[x]
 
-def getTools():
-    '''
-    Returns a model of found  prefix-related tools using the following row
-    format:
-        ( icon_pixbuf, icon_text, GTuple( executable_path, *arguments ),
-        unused Bool )
-    '''
-    checked = (
-        "wine",
-        )
-    tools = {
-        "Winetricks": ("wine-winetricks",("winetricks",),False),
-        "Winecfg": ("wine-winecfg",("winecfg",),False),
-        "Wine cmd":("terminal",("x-terminal-emulator","-e", "env", "WINEPREFIX=$WINEPREFIX", "wine","cmd"),False),
-        "Wine uninstaller":("wine-uninstaller",("wine","uninstaller"),False),
-        "Winefile":("wine",("wine","explorer"),False),
-        "Wine regedit":("wine",("wine","regedit"),False),
-        "Browse prefix folder":("gtk-directory",("xdg-open","$WINEPREFIX"),True),
-        }
-    theme = gtk.icon_theme_get_default()
-    model = gtk.ListStore(gtk.gdk.Pixbuf, str, GTuple, bool)
-    for i in tools:
-        bin = tools[i][1][0]
-        if bin in checked or checkBin(bin):
-            model.append(
-                (theme.load_icon(tools[i][0], 24, 0), i,
-                    GTuple((getBin(tools[i][1][0]),)+tools[i][1][1:]),
-                    tools[i][2]))
-    return model
 
-class Main(object):
+class Prefix(object):
+    @property
+    def path(self): return self._path
+    
+    @property
+    def winepath(self):
+        tr = self["ww_wine"]
+        if tr: return unrelativize(tr, self)
+        return tr
+        
+    @winepath.setter
+    def winepath(self, x):
+        if x: self["ww_wine"] = relativize(x, self)
+        else: self["ww_wine"] = self._defaults["ww_wine"]
+    
+    @property
+    def known_executables(self):
+        if self["ww_known_executables"]:
+            return tuple(unrelativize(i, self) for i in self["ww_known_executables"].split(":"))
+        return ()
+        
+    def add_known_executable(self, x):
+        known = self["ww_known_executables"].split(":")
+        x = relativize(x, self)
+        if x not in known:
+            known.append(x)
+            self["ww_known_executables"] = ":".join(known)
+        
+    def remove_known_executable(self, x):
+        known = self["ww_known_executables"].split(":")
+        x = relativize(x, self)
+        if x in known:
+            known.remove(x)
+            self["ww_known_executables"] = ":".join(known)
+        
+    def extend_known_executables(self, x):
+        known = self["ww_known_executables"].split(":")
+        nold = len(known)
+        for i in x:
+            i = relativize(i, self)
+            if i not in known:
+                known.append(i)
+        if len(known) != nold: self["ww_known_executables"] = ":".join(known)
+        
+    @property
+    def imported(self):
+        return islink(self._path)
+
+    def __init__(self, path, defaults):
+        if not isabs(path):
+            path = expandvars("$HOME/.local/share/wineprefixes/%s" % path)
+        self._path = path
+        self._config = path_join(path, "wrapper.cfg")
+        self._defaults = defaults
+        self._cache = {}
+    
+    def __setitem__(self, x, y):
+        found = False
+        del_item = False
+        if x in self._defaults and y == self._defaults[x]:
+            if x in self._cache: del self._cache[x]
+            del_item = True
+        else: self._cache[x] = y
+        if isfile(self._config):
+            f = open(self._config, "r")
+            data = f.readlines()
+            newlinechar = linesep
+            if not f.newlines is None:
+                if f.newlines is tuple:
+                    newlinechar = f.newlines[-1]
+                else:
+                    newlinechar = f.newlines
+            f.close()
+            
+            for i in xrange(len(data)):
+                if data[i].split("=")[0] == x:
+                    if del_item: data[i] = ""
+                    else: data[i] = "%s=\"%s\"%s" % (x, y, newlinechar)
+                    found = True
+                    break
+        else:
+            newlinechar = linesep
+            data = []
+        if not found and not del_item: data.append("%s=\"%s\"%s" % (x, y, newlinechar))
+        f = open(self._config, "w")
+        f.writelines(data)
+        f.close()
+        
+    def __getitem__(self, x):
+        if x in self._cache: return self._cache[x]
+        elif isfile(self._config):
+            f = open(self._config, "r")
+            data = f.readlines()
+            newlinechar = linesep
+            if not f.newlines is None:
+                if f.newlines is tuple: newlinechar = f.newlines[-1]
+                else: newlinechar = f.newlines
+            f.close()
+            for i in xrange(len(data)): # We cache all data
+                if "=" in data[i] and data[i].strip()[0] != "#":
+                    key, value = data[i].split("=")
+                    key = key.strip()
+                    value = value.strip()
+                    if value[0] == "\"": value = value[1:-1]
+                    #if key in self._defaults and value != self._defaults[key]:
+                    self._cache[key] = value
+            if x in self._cache: return self._cache[x]
+        if x in self._defaults: return self._defaults[x]
+        raise KeyError("No variable with name %s." % x)
+        
+    def memorize(self):
+        newdir = expandvars("$HOME/.local/share/wineprefixes")
+        if self._path.startswith(newdir): # internal prefix
+            if not exists(self._path): mkdir(self._path)
+        else: # external prefix, must symlink and change self._path
+            if not exists(self._path): mkdir(self._path)
+            # Symlink to wineprefixes directory
+            
+            # Generate symlink name
+            old_path = self._path
+            new_path = namer(path_join(newdir, path_split(self._path)[-1]))
+    
+            symlink(old_path, new_path)
+            self._path = new_path            
+
+class Main(object):            
+    @classmethod
+    def default_treeview_sort(self, model, iter1, iter2):
+        a1 = model.get_value(iter1, 0)
+        a2 = model.get_value(iter1, 4)
+        b1 = model.get_value(iter2, 0)
+        b2 = model.get_value(iter2, 4)
+        if a2 and b2:
+            return cmp(a1+a2,b1+b2) 
+        return cmp(a1,b1)
+        
+    constant_treeview_prefix = 0
+    constant_treeview_executable = 1
+    constant_treeview_broken_prefix = 2
+    constant_treeview_broken_executable = 3
+
     def __init__(self, args=None):
-        if args==None:
-            args = [__file__]
+        if args == None: args = [__file__]
         guifile = "/usr/share/pywinery/gui.glade"
         localgui = path_join(dirname(args[0]),"gui.glade")
-        if isfile(localgui):
-            guifile = localgui
+        if isfile(localgui): guifile = localgui
 
         self.killable_threads = []
         self.xml = gtk.glade.XML(guifile)
-        self.configfile = expandvars("$HOME/.config/pywinery/prefixes.config")
-        self.configlines = []
-        self.configsublines = {}
-        self.readConfigFile()
-
-        self.msi = None
-        self.wineversion = [0]
-
-        self.autocreateprefix = False
-        self.configMode = False
-        self.errors = ErrorManager()
+        
+        self.default_prefix_config = {
+            "ww_name": None,
+            "ww_known_executables" : "",
+            "ww_wine": None,
+            "ww_winemenubuilder_disable" : None,
+            "ww_ignore" : None
+            }
+        self.prefixes = getPrefixes(self.default_prefix_config)
+        self.prefixes_by_id = dict((id(i), i) for i in self.prefixes)
+        self.prefixes_by_path = dict((i.path, i) for i in self.prefixes)
+        
         self.lastTreeviewClick = 0
+        
+        self.initialized_combo = False
+        self.initialized_treeview = False
 
-        self.winebin = getBin("wine")
+        self.default_winepath = getBin("wine")
+        self.default_environment = environ.copy()
+        
+        self.given_msi = None
+        self.given_cmd = None 
+        self.given_exe = None # absolute, not real
+        
+        self.flag_mode_config = False
+        self.flag_mode_debug = False
+        self.flag_mode_nogui = False
+        
+        self.flag_remember = False
+        self.flag_unknown_prefix = False
+        
+        self.flag_treeview_click_time = 0
+        
+        self.current_prefix = None
 
-        if not bool(self.winebin):
-            self.showError("nowine","Wine is not detected on your system")
-            for i in ("expander1","button1","button8"):
-                self.xml.get_widget(i).set_property("visible", False)
-        else:
-            self.wineversion = getWineVersion()
-            self.autocreateprefix = self.wineversion > (1,)
-            self.xml.get_widget("button13").set_property("visible",checkBin("wine-doors"))
-            self.xml.get_widget("button18").set_property("visible",checkBin("winetricks"))
-
-        self.silent = False
-        self.nodebug = False        #f.writelines([ i+linesep for i in self.configlines ])
-        self.openconfig = False
-
-        c=1
+        c = 1
         for i in args[1:]:
-            if i[0]!="-":
-                break # Given commands can contains - and -- too
-            elif i in ("-x","--nogui"):
-                self.silent = True
-            elif i in ("-s","--silent"):
-                self.nodebug = True
-            elif i in ("-c","--config"):
-                self.openconfig = True
+            if i[0] != "-": break # Given commands can contains - and -- too
+            elif i == "-x" or i == "--nogui": self.flag_mode_nogui = True
+            elif i == "-d" or i == "--debug": self.flag_mode_debug = True
+            elif i == "-c" or i == "--config": self.flag_mode_config = True
             c += 1
 
-        self.zig = args[c:]
-        self.favprefix = None
-        self.path = None
-        if self.zig:
-            # If an exe is given
-            for i,j in self.configsublines.items():
-                if realpath(self.zig[0]) in j:
-                    self.favprefix = i
-                    self.xml.get_widget("checkbutton1").set_property("active",True)
-                    self.silent = not self.openconfig
-                    break
-
-            if self.favprefix is None:
-                path = realpath(self.zig[0])
-                self.path = dirname(path)
-                sp = self.path.split(sep)
-                for i in ("drive_c","dosdevices"):
-                    if i in sp:
-                        self.favprefix = sep.join(sp[:sp.index(i)])
-                        if not self.favprefix in self.configlines:
-                            self.unknowndir()
-                        break
-
-                if isfile(self.zig[0]) and guess_type(realpath(self.zig[0]))[0].lower()=="application/x-msi":
-                    self.msi = realpath(args[1])
-
-            self.xml.get_widget("button1").set_property("visible", not bool(self.msi))
-            self.xml.get_widget("button8").set_property("visible", bool(self.msi))
-            self.xml.get_widget("button20").set_property("visible", False)
-        else:
-            for i in (1,8,12):
-                self.xml.get_widget("button%d" % i).set_property("visible", False)
-
-            self.xml.get_widget("expander1").set_expanded(True)
-
-        for i in (11,1,3,4,5,6,7):
-            self.xml.get_widget("label%d" % i ).set_property("visible",False)
-
-        self.xml.get_widget("vbox10").set_property("visible",False)
-        self.xml.get_widget("vbox12").set_property("visible",False)
-        self.xml.get_widget("vbox15").set_property("visible", self.zig and not self.msi)
-
-        self.comboInit()
-        iconview = self.xml.get_widget("iconview1")
-        iconview.set_model(getTools())
-        iconview.set_pixbuf_column(0)
-        iconview.set_text_column(1)
-
-        dic = {"on_window1_destroy" : self.__quit,
-               "on_button12_clicked" : self.__quit,
-               "on_combobox1_changed" : self.combochange,
-               "on_button1_clicked" : None,
-               "on_button6_clicked" : self.adddir,
-               "on_button7_clicked" : self.removeprefix,
-               "on_button1_clicked" : self.runAndExit,
-               "on_button8_clicked" : lambda x: (self.execute([self.winebin,"msiexec","/i",self.msi]), self.__quit()),
-               "on_button16_clicked" : lambda x: self.toggleConfig(True),
-               "on_button17_clicked" : self.removeapp,
-               "on_button19_clicked" : lambda x: self.toggleConfig(False),
-               "on_checkbutton1_toggled" : self.addapp,
-               "on_dialog1_delete_event" : rFalse,
-               "on_iconview1_item_activated" : self.iconview_activated,
-            }
-        self.xml.signal_autoconnect(dic)
-        self.env = environ.copy()
-        if self.nodebug:
-            self.env["WINEDEBUG"] = "-all"
-
-    def iconview_activated(self, iconview, path):
-        model = iconview.get_model()
-        self.execute(model.get_value(model.get_iter(path), 2).tup)
-
-    def readConfigFile(self):
-        if isfile(self.configfile):
-            f = open(self.configfile,"r")
-            self.configlines = []
-            self.configsublines = {}
-            for i in f.readlines():
-                si = i.strip()
-                if si:
-                    if si[0]==">":
-                        if self.configlines:
-                            self.configsublines[self.configlines[-1]].append(si[1:].strip())
-                    elif si:
-                        self.configlines.append(si)
-                        self.configsublines[si] = []
-            f.close()
-        else:
-            self.writeConfigFile()
-
-    def writeConfigFile(self):
-        mkpath(path_split(self.configfile)[0])
-        f = open(self.configfile,"w")
-        for i in self.configlines:
-            f.write("%s%s" % ( i, linesep))
-            if i in self.configsublines:
-                for j in self.configsublines[i]:
-                    f.write(">%s%s" % ( j, linesep))
-        f.close()
-
-    def showError(self, id=None, message=None):
-        if id==None:
-            message = self.errors.last()
-        else:
-            self.errors.add( id, message )
-        if message:
-            self.xml.get_widget("labelerror").set_label(message)
-            self.xml.get_widget("errorbox").set_property("visible",True)
-        else:
-            self.xml.get_widget("errorbox").set_property("visible",False)
-
-    def hideError(self,id=None):
-        if id != None:
-            self.errors.remove(id)
-        self.showError()
-
-    def no_delete(self, w):
-        w.hide()
-        return True
-
-    def runAndExit(self, *args):
-        self.execute( [self.winebin] + self.zig )
-        self.__quit()
-
-    def run(self):
-        try:
-            if self.silent:
-                if self.zig:
-                    if self.favprefix:
-                        self.env["WINEPREFIX"] = self.favprefix
-                        self.runAndExit()
-                    else:
-                        print "Pywinery is unable to find a suitable prefix."
+        if len(args) > c:
+            apath = abspath(args[c])
+            if isfile(apath): # Given arg is file, thus is exe or msi
+                if guess_type(apath)[0].lower() == "application/x-msi":
+                    self.given_msi = (apath,)+tuple(args[c+1:])
                 else:
-                    print "Nothing to do"
-                sys_exit(1)
+                    self.given_exe = (apath,)+tuple(args[c+1:])
+                    for i in self.prefixes:
+                        if relativize(apath, i) in i["ww_known_executables"].split(":"):
+                            self.current_prefix = i
+                            self.flag_remember = True
+                            break
+
+                if not self.current_prefix:
+                    for i in self.prefixes:
+                        if apath.startswith(i.path) or ( i.imported and
+                          abspath(apath).startswith(realpath(i.path)) ):
+                            self.current_prefix = i
+                            break
+                    else: # If given cmd isn't on any prefix
+                        sp = apath.split(sep)[:-1]
+                        while len(sp) > 1:
+                            lookdir = sep.join(sp)
+                            print lookdir
+                            lookdir_content = listdir(lookdir)
+                            if (
+                              "system.reg" in lookdir_content and
+                              "drive_c" in lookdir_content and
+                              "dosdevices" in lookdir_content):
+                                self.flag_unknown_prefix = True
+                                self.current_prefix = Prefix(lookdir, self.default_prefix_config)
+                                break
+                            sp.pop()
             else:
-                gtk.gdk.threads_init()
-                window = self.xml.get_widget("window1")
-                self.combochange()
-                self.toggleConfig(self.openconfig)
-                window.show()
-                gtk.main()
-        except KeyboardInterrupt:
-            sys_exit(1)
-        sys_exit(0)
-
-    def comboInit(self,auto=True):
-        combo = self.xml.get_widget("combobox1")
-        new = True
-        modelp = combo.get_model()
-        if modelp != None:
-            modelp.clear()
-            combo.set_model(None)
-            new = False
-        model = gtk.ListStore(gobject.TYPE_STRING,gobject.TYPE_STRING,gobject.TYPE_STRING)
-        model.set_sort_column_id(2,gtk.SORT_ASCENDING)
-        combo.set_model(model)
-        if new:
-            render = gtk.CellRendererText()
-            render.set_property("ellipsize",pango.ELLIPSIZE_START)
-            render.set_property("ellipsize-set",False)
-            render.set_property("alignment",pango.ALIGN_RIGHT)
-            combo.pack_start(render,False)
-            combo.add_attribute(render, 'text', 1)
-            render = gtk.CellRendererText()
-            render.set_property("ellipsize-set",False)
-            render.set_property("alignment",pango.ALIGN_LEFT)
-            combo.pack_start(render,False)
-            combo.add_attribute(render, 'text', 2)
-        a = {}
-        p = -1
-        while p==-1:# or len(a)!=len(self.configlines) or len(self.configlines)==-p:
-            for i in self.configlines:
-                n = sep.join(i.split(sep)[p:])
-                if i not in a:
-                    if n in a.values():
-                        u = None
-                        for j,k in a.items():
-                            if k==n:
-                                u=j
-                        if u:
-                            a.pop(u)
-                    else:
-                        a[i] = n
-            p -= 1
-        for i in a:
-            #model.append([i,dirname(i),i.split(sep)[-1]])
-            model.append([i,"...","%s" % (a[i])])
-
-        if self.favprefix and auto:
-            self.comboSet(self.favprefix)
-
-    def comboSet(self,prefix):
-        combo = self.xml.get_widget("combobox1")
-        if prefix is None:
-            combo.set_active(-1)
-            return
-        model = combo.get_model()
-        for i in model:
-            if i[0]==prefix:
-                combo.set_active_iter(i.iter)
+                self.given_cmd = args[c:]
+    
+    def action_open_directory(self, directory):
+        for i in ("xdg-open", ):
+            if checkBin(i):
+                Popen((i, directory), env=self.default_environment)
                 break
+        else:
+            self.xml.get_widget("labelerror").set_label("Cannot open: exo-open nor xdg-open found.")
+            self.xml.get_widget("errorbox").set_property("visible", True)
+        
+    def action_run_at_prefix(self, prefix, command):
+        if self.flag_mode_debug: print("Pywinery: %s" % repr(command))
+        if isinstance(prefix, int): prefix = self.prefixes_by_id[prefix]
+        elif isinstance(prefix, basestring):  prefix = self.prefixes_by_path[prefix]
+        env = self.default_environment.copy()
+        if self.flag_mode_debug: env["WINEDEBUG"] = "+all"
+        else: env["WINEDEBUG"] = "-all"
+        if prefix["ww_winemenubuilder_disable"]: ov =  "winemenubuilder.exe=d"
+        else: ov =  "winemenubuilder.exe=n"
+        if "WINEDLLOVERRIDES" in env: env["WINEDLLOVERRIDES"] = "%s;%s" % (env["WINEDLLOVERRIDES"], ov)
+        else: env["WINEDLLOVERRIDES"] = ov
+        env["WINEPREFIX"] = prefix.path
+        Popen(command, env = env)
+        
+    def run(self):
+        if self.flag_mode_nogui:
+            if self.given_msi or self.given_exe or self.given_cmd:
+                if self.current_prefix:
+                    if self.flag_unknown_prefix: stderr.write("Autodetected unknown prefix.")
+                    self.handler_launch()
+                else: stderr.write("Pywinery is unable to find a suitable prefix.%s" % linesep)
+            else: stderr.write("Nothing to do.%s" % linesep)
+            sys_exit(1)
+        else:
+            if self.flag_unknown_prefix:
+                dialog = self.xml.get_widget("dialog1")
+                if dialog.run() == 1:
+                    self.prefixes.append(self.current_prefix)
+                    self.current_prefix.memorize()
+                dialog.hide()
+            gtk.gdk.threads_init()
+            self.guiStart()
+            self.xml.get_widget("window1").set_property("visible", True)
+            gtk.main()
 
-    def adddir(self,*args):
-        dialog = gtk.FileChooserDialog(
-            "Select a directory",
+    def initialize_combo(self):
+        combo = self.xml.get_widget("combobox1")
+        model = combo.get_model()
+        if self.initialized_combo:
+            model.clear()
+            for i in model: model.remove(i.iter)
+        else:
+            model = gtk.ListStore(gobject.TYPE_INT, gtk.gdk.Pixbuf, gobject.TYPE_STRING, gobject.TYPE_STRING)
+            model.set_sort_column_id(2, gtk.SORT_ASCENDING)
+            combo.set_model(model)
+            render = gtk.CellRendererPixbuf()
+            #render.set_property("alignment", pango.ALIGN_RIGHT)
+            combo.pack_start(render, False)
+            combo.add_attribute(render, 'pixbuf', 1)
+            
+            render = gtk.CellRendererText()
+            render.set_property("ellipsize-set", False)
+            render.set_property("alignment", pango.ALIGN_LEFT)
+            combo.pack_start(render, True)
+            combo.add_attribute(render, 'text', 2)
+            
+            render = gtk.CellRendererText()
+            render.set_property("ellipsize-set", pango.ELLIPSIZE_START)
+            render.set_property("weight", 300)
+            render.set_property("scale", 0.8)
+            #render.set_property("alignment", pango.ALIGN_RIGHT)
+            combo.pack_start(render, False)
+            combo.add_attribute(render, 'text', 3)
+            
+            self.initialized_combo = True
+            
+        names = dict((i,i["ww_name"] or path_split(i.path)[-1]) for i in self.prefixes)
+        names_values = names.values()
+        for i in self.prefixes:
+            model.append((id(i), None, names[i],
+                "%s" % path_split(i.path)[-1]
+                if names_values.count(names[i]) > 1 else ""))
+
+        self.refresh_combo()
+        
+    def initialize_treeview(self):
+        tree = self.xml.get_widget("treeview1")
+        treeselection = tree.get_selection()
+
+        model = tree.get_model()
+        if isinstance(model, gtk.TreeModelSort):
+            model = model.get_model()
+        if self.initialized_treeview:
+            model.clear()
+            for i in model: model.remove(i.iter)
+        else:
+            col = gtk.TreeViewColumn("prefix")
+            col_cell_img = gtk.CellRendererPixbuf()
+            col.pack_start(col_cell_img, False)
+            col.add_attribute(col_cell_img, "pixbuf", 1)
+
+            col.set_sort_order(gtk.SORT_ASCENDING)
+            col.set_sort_column_id(0)
+            col_cell_text = gtk.CellRendererText()
+            col.pack_start(col_cell_text, False)
+            col.add_attribute(col_cell_text, "text", 0)
+
+            col_cell_text2 = gtk.CellRendererText()
+            col_cell_text2.set_property("weight", 300)
+            col_cell_text2.set_property("scale", 0.8)
+            col_cell_text2.set_property("ellipsize-set", pango.ELLIPSIZE_START)
+            col.pack_start(col_cell_text2, False)
+            col.add_attribute(col_cell_text2, "text", 4)
+
+            col_cell_text3 = gtk.CellRendererText()
+            col.pack_start(col_cell_text3, True)
+            col.add_attribute(col_cell_text3, "text", 6)
+            tree.append_column(col)
+            
+            model = gtk.TreeStore(str, gtk.gdk.Pixbuf, int, int, str, str, str)
+            sortmodel = gtk.TreeModelSort(model)
+            sortmodel.set_default_sort_func(self.default_treeview_sort)
+            tree.set_model(sortmodel)
+            treeselection.set_mode(gtk.SELECTION_SINGLE)
+            self.initialized_treeview = True
+
+        treeselection.set_select_function(self.handler_treeselect)
+
+        imgdir = tree.render_icon(stock_id="gtk-directory", size=gtk.ICON_SIZE_MENU, detail=None)
+        imgprefix = tree.render_icon(stock_id="gtk-harddisk", size=gtk.ICON_SIZE_MENU, detail=None)
+        imgexe = tree.render_icon(stock_id="gtk-execute", size=gtk.ICON_SIZE_MENU, detail=None)
+        imgerror = tree.render_icon(stock_id="gtk-dialog-error", size=gtk.ICON_SIZE_MENU, detail=None)
+
+        names = dict((i, i["ww_name"] or path_split(i.path)[-1]) for i in self.prefixes)
+        names_values = names.values()
+        
+        # ( name, pixbuf, id, type, comment, path, comment ) 
+        for i in self.prefixes:
+            broken = isinstance(i, BrokenPrefix)
+            known = i.known_executables
+            lk = len(known)
+            li = model.append( None, (
+                names[i],
+                imgerror if broken else imgprefix,
+                id(i),
+                self.constant_treeview_broken_prefix 
+                    if broken else self.constant_treeview_prefix,
+                "%s" % path_split(i.path)[-1]
+                    if names_values.count(names[i]) > 1 else "",
+                i.path,
+                "(%d application%s)" % (lk, "s" if lk > 1 else "")
+                    if known else "" ))
+            for j in known:
+                broken = not isfile(j)
+                model.append(li, (
+                    path_split(j)[-1],
+                    imgerror if broken else imgexe,
+                    0,
+                    self.constant_treeview_broken_executable
+                        if broken else self.constant_treeview_executable,
+                    "", j, "" ))
+        self.refresh_treeview()
+        
+    def refresh_combo(self):
+        combo = self.xml.get_widget("combobox1")
+        
+        if self.initialized_combo:
+            if self.current_prefix is None: combo.set_active(-1)
+            else:
+                current_id = id(self.current_prefix)
+                for i in combo.get_model():
+                    if i[0] == current_id:
+                        combo.set_active_iter(i.iter)
+                        self.guiChange()
+                        break
+        else:
+            self.initialize_combo()
+                    
+    def refresh_treeview(self):
+        tree = self.xml.get_widget("treeview1")
+        selection = tree.get_selection()
+       
+        if self.initialized_treeview:
+            if self.current_prefix is None: selection.unselect_all()
+            else:
+                model = tree.get_model()
+                prefix_id = id(self.current_prefix)
+                for i in model:
+                    if model.get_value(i.iter, 2) == prefix_id:
+                        path = model.get_path(i.iter)
+                        if not selection.iter_is_selected(i.iter):
+                            selection.select_iter(i.iter)
+                        tree.expand_row(path, True)
+                        break
+        else:
+            self.initialize_treeview()
+
+    def handler_iconview(self, iconview, path):
+        model = iconview.get_model()
+        command = model.get_value(model.get_iter(path), 2).tup
+        self.action_run_at_prefix(self.current_prefix, command)
+
+    def handler_error(self, code=None, message=None):
+        if code == None:
+            self.xml.get_widget("errorbox").set_property("visible", False)
+        else:
+            self.xml.get_widget("labelerror").set_label(message)
+            self.xml.get_widget("errorbox").set_property("visible", True)
+            
+    def handler_launch(self, *args, **kwargs):
+        winepath = (self.current_prefix.winepath or self.default_winepath,)
+        if self.given_msi: command = winepath + ("msiexec", "/i") + self.given_msi
+        elif self.given_exe:
+            rpath = realpath(self.given_exe[0])
+            if self.flag_remember:
+                self.current_prefix.add_known_executable(rpath)
+            else:
+                self.current_prefix.remove_known_executable(rpath)
+            command = winepath + self.given_exe
+        else: command = winepath + self.given_cmd
+        self.action_run_at_prefix(self.current_prefix, command)
+        self.handler_quit()
+        
+    def handler_show_treeview(self, *args, **kwargs):
+        self.refresh_treeview()
+        self.xml.get_widget("hbox1").set_property("visible", True)
+        self.xml.get_widget("hbox3").set_property("visible", False)
+        
+        #while gtk.events_pending(): gtk.main_iteration()
+        
+        tree = self.xml.get_widget("treeview1")
+        model = tree.get_model()
+        prefix_id = id(self.current_prefix)
+        for i in model:
+            if model.get_value(i.iter, 2) == prefix_id:
+                tree.scroll_to_cell(model.get_path(i.iter), tree.get_column(0), True, 0, 0.5)
+                break
+        
+    
+    def handler_show_combo(self, *args, **kwargs):
+        self.refresh_combo()
+        self.xml.get_widget("hbox1").set_property("visible", False)
+        self.xml.get_widget("hbox3").set_property("visible", True)
+    
+    def handler_menu_newprefix(self, *args):
+        dialog = self.xml.get_widget("dialog2")
+        self.xml.get_widget("button5").set_property("visible", True) # add button
+        self.xml.get_widget("button7").set_property("visible", False) # ok button
+        #dialog.set_property("visible", True)
+        while True: # Repeat if not name is given
+            response = dialog.run()
+            dialog.hide()
+            if response == 1:
+                name = self.xml.get_widget("entry1").get_text().strip()
+                if name:
+                    prefix = Prefix(
+                        namer(expandvars(
+                            "$HOME/.local/share/wineprefixes/%s" % name)),
+                        self.default_prefix_config)
+                    prefix.memorize()
+                    prefix["ww_name"] = name
+                    self.prefixes_by_id[id(prefix)] = prefix
+                    self.prefixes_by_path[prefix.path] = prefix
+                    self.prefixes.append(prefix)
+                    self.guiPrefix()
+                    break
+            else: break
+    
+    def handler_menu_addprefix(self, *args):
+        dialog1 = gtk.FileChooserDialog(
+            "Select prefix directory",
             self.xml.get_widget("window1"),
             gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER,
-            (gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,gtk.STOCK_ADD,gtk.RESPONSE_OK))
-
-        response = dialog.run()
+            (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_ADD, gtk.RESPONSE_OK))
+        dialog1.set_local_only(True)
+        while True:
+            response = dialog1.run()
+            dialog1.hide()
+            if response == gtk.RESPONSE_OK:
+                filename = dialog1.get_filename()
+                prefix = Prefix(abspath(filename), self.default_prefix_config)
+                dialog2 = self.xml.get_widget("dialog2")
+                self.xml.get_widget("button5").set_property("visible", True) # add button
+                self.xml.get_widget("button7").set_property("visible", False) # ok button
+                self.xml.get_widget("entry1").set_text(prefix["ww_name"] or path_split(filename)[-1])
+                response = dialog2.run()
+                dialog2.hide()
+                if response == 1:
+                    name = self.xml.get_widget("entry1").get_text()
+                    if prefix["ww_name"] != name: prefix["ww_name"] = name
+                    if prefix["ww_ignore"] != None: prefix["ww_ignore"] = None
+                    prefix.memorize()
+                    self.prefixes_by_id[id(prefix)] = prefix
+                    self.prefixes_by_path[prefix.path] = prefix
+                    self.prefixes.append(prefix)
+                    self.guiPrefix()
+                    break
+            else: break
+        dialog1.destroy()
+        
+    def handler_menu_addexe(self, *args):
+        fil = gtk.FileFilter()
+        fil.set_name("Windows executable")
+        fil.add_pattern("*.exe")
+        dialog1 = gtk.FileChooserDialog(
+            "Select executable or executables",
+            self.xml.get_widget("window1"),
+            gtk.FILE_CHOOSER_ACTION_OPEN,
+            (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_ADD, gtk.RESPONSE_OK))
+        dialog1.set_local_only(True)
+        dialog1.set_select_multiple(True)
+        dialog1.add_filter(fil)
+        response = dialog1.run()
+        dialog1.hide()
         if response == gtk.RESPONSE_OK:
-            self.addfilenames(dialog.get_filenames())
-        dialog.destroy()
-
-    def addapp(self, *args):
-        app = realpath(self.zig[0])
-        active = self.xml.get_widget("checkbutton1").get_property("active")
-        for i in self.configsublines:
-            if app in self.configsublines[i]:
-                self.configsublines[i].remove(app)
-        if active:
-            self.configsublines[self.getComboValue()].append(app)
-        self.writeConfigFile()
-
-
-    def treeSelectionFunction(self, selection):
-        t = time()
-        if t - self.lastTreeviewClick < 0.1:
-            return True
-        self.lastTreeviewClick = t
-        tree = self.xml.get_widget("treeview1")
-        model = tree.get_model()
-        iter = model.get_iter(selection)
-        a = model.get_value(iter,3)
-        if a==0:
-            if tree.row_expanded(selection):
-                tree.collapse_row(selection)
-            else:
-                tree.expand_row(selection,False)
-            self.comboSet(None)
-        elif a==1:
-            self.treeviewSelect(iter=iter)
-            self.comboSet(model.get_value(iter,2))
-            self.xml.get_widget("vbox16").set_property("visible",True)
-            self.xml.get_widget("vbox17").set_property("visible",False)
-        elif a==2:
-            self.treeviewSelect(iter=iter)
-            self.comboSet(model.get_value(model.iter_parent(iter),2))
-            self.xml.get_widget("vbox16").set_property("visible",False)
-            self.xml.get_widget("vbox17").set_property("visible",True)
-        return False
-
-    def toggleConfig(self,visible=None):
-        if visible is None:
-            visible = not self.configMode
-
-        window = self.xml.get_widget("window1")
-        selectiters = []
-        if visible:
+            
             tree = self.xml.get_widget("treeview1")
+            model, items = tree.get_selection().get_selected_rows()
+            treeiter = model.get_iter(items[0])
+            row_type = model.get_value(treeiter, 3)
+            prefix_id = None
+            if row_type  == self.constant_treeview_prefix:
+                prefix_id = model.get_value(treeiter, 2)
+            elif row_type in (self.constant_treeview_broken_executable,
+              self.constant_treeview_executable):
+                prefix_id = model.get_value(model.iter_parent(treeiter), 2)
+            if prefix_id:
+                prefix = self.prefixes_by_id[prefix_id]
+                filenames = dialog1.get_filenames()
+                if filenames:
+                    prefix.extend_known_executables(filenames)
+                    self.guiExecutable()
+        dialog1.destroy()
 
-            treeselection = tree.get_selection()
-
-            model = tree.get_model()
-            if model is None:
-                col = gtk.TreeViewColumn("prefix")
-                col_cell_text = gtk.CellRendererText()
-                col_cell_img = gtk.CellRendererPixbuf()
-                col.pack_start(col_cell_img, False)
-                col.pack_start(col_cell_text, True)
-                col.add_attribute(col_cell_text, "text", 0)
-                col.add_attribute(col_cell_img, "pixbuf", 1)
-                tree.append_column(col)
-                model = gtk.TreeStore(str, gtk.gdk.Pixbuf, str, int)
-                model.set_sort_column_id(0,gtk.SORT_ASCENDING)
-                tree.set_model(model)
-
-                treeselection.set_mode(gtk.SELECTION_SINGLE)
-            else:
-                model.clear()
-                for i in model:
-                    model.remove(i.iter)
-
-            treeselection.set_select_function(self.treeSelectionFunction)
-
-            imgdir   = tree.render_icon(stock_id="gtk-directory",    size=gtk.ICON_SIZE_MENU, detail=None)
-            imgprefix   = tree.render_icon(stock_id="gtk-harddisk",        size=gtk.ICON_SIZE_MENU, detail=None)
-            imgexe   = tree.render_icon(stock_id="gtk-execute",        size=gtk.ICON_SIZE_MENU, detail=None)
-            imgerror = tree.render_icon(stock_id="gtk-dialog-error", size=gtk.ICON_SIZE_MENU, detail=None)
-            prefix = self.getComboValue()
-            prefixes = self.configlines
-
-            def tree_to_model(parent,node,path=""):
-                tr = []
-                for i in node:
-                    pwd = path+sep+i if path else i
-                    is_directory = False
-                    is_error = not exists(pwd)
-                    is_prefix = pwd in prefixes
-                    if is_error:
-                        img = imgerror
-                    elif is_prefix:
-                        img = imgprefix
-                    elif isdir(pwd):
-                        img = imgdir
-                    else:
-                        img = imgerror
-                    li = model.append(parent, [i, img, pwd, int(is_prefix)])
-                    if is_prefix:
-                        for j in self.configsublines[pwd]:
-                            model.append(li, [j.split(sep)[-1], imgexe, j, 2])
-                        if pwd == prefix:
-                            tr.append(li)
-
-                    tr += tree_to_model(li,node[i],pwd)
-                return tr
-
-            selectiters = tree_to_model(None,generate_tree(self.configlines))
-
-
-        self.xml.get_widget("vbox17").set_property("visible",False)
-        for i in ("hbuttonbox1","vbox2"):
-            self.xml.get_widget(i).set_property("visible",not visible)
-
-        for i in ("hbuttonbox3","vbox12"):
-            self.xml.get_widget(i).set_property("visible",visible)
-        for i in selectiters:
-            self.treeviewSelect(iter=i)
-        self.configMode = visible
-
-    def treeviewSelect(self, value=None, iter=None,):
+    def handler_remember(self, *args):
+        self.flag_remember = self.xml.get_widget("checkbutton1").get_property("active")
+        
+    def handler_treebutton(self, widget, event):
+        tree = self.xml.get_widget("treeview1")
+        path_at_pos = tree.get_path_at_pos(int(event.x), int(event.y))
+        if path_at_pos is None:
+            tree.get_selection().unselect_all()
+            self.current_prefix = None
+            self.guiChange()
+        if event.button == 3:
+            menu = "menu1"
+            disable = ()
+            enable = ()
+            if path_at_pos != None:
+                model = tree.get_model()
+                treeiter = model.get_iter(path_at_pos[0])
+                treeselection = tree.get_selection()
+                if not treeselection.iter_is_selected(treeiter):
+                    treeselection.select_iter(treeiter)
+                if treeiter:
+                    a = model.get_value(treeiter, 3)
+                    if a == self.constant_treeview_prefix:
+                        menu = "menu2"
+                        enable = ("menuitem10","menuitem13")
+                    elif a == self.constant_treeview_broken_prefix:
+                        menu = "menu2"
+                        disable = ("menuitem10","menuitem13")
+                    elif a == self.constant_treeview_executable:
+                        menu = "menu3"
+                        enable = ("menuitem14",)
+                    elif a == self.constant_treeview_broken_executable:
+                        menu = "menu3"
+                        disable = ("menuitem14",)
+            for i in disable:
+                self.xml.get_widget(i).set_property("sensitive", False)
+            for i in enable:
+                self.xml.get_widget(i).set_property("sensitive", True)
+            self.xml.get_widget(menu).popup( None, None, None, event.button, event.time)
+        elif event.button == 1 and event.type == gtk.gdk._2BUTTON_PRESS:
+            if path_at_pos != None:
+                model = tree.get_model()
+                treeiter = model.get_iter(path_at_pos[0])
+                #tree.get_selection().select_iter(treeiter)
+                if treeiter:
+                    a = model.get_value(treeiter, 3)
+                    if a == self.constant_treeview_prefix:
+                        directory = model.get_value(treeiter, 5)
+                        if islink(directory): directory = realpath(directory)
+                        self.action_open_directory(directory)
+                    elif a == self.constant_treeview_executable:
+                        prefix = self.prefixes_by_id[model.get_value(model.iter_parent(treeiter), 2)]
+                        self.action_run_at_prefix(prefix, (
+                            prefix.winepath or self.default_winepath,
+                            model.get_value(treeiter, 5)))
+                
+    def handler_set_winepath(self, filechooserbutton):
+        winepath = filechooserbutton.get_filename()
+        if winepath: self.current_prefix.winepath = winepath
+        else: self.current_prefix.winepath = None
+        self.guiChange()
+                
+    def handler_reset_winepath(self, *args):
+        self.xml.get_widget("filechooserbutton1").unselect_all()
+        self.current_prefix["ww_wine"] = None
+        elf.guiChange()
+        
+    def handler_reset_winemenubuilder(self, *args):
+        self.xml.get_widget("checkbutton2").set_property("active", False)
+        
+    def handler_winemenubuilder_toggle(self, *args):
+        if self.current_prefix:
+            value = None
+            if self.xml.get_widget("checkbutton2").get_property("active"):
+                value = "1"
+            if value != self.current_prefix["ww_winemenubuilder_disable"]:
+                self.current_prefix["ww_winemenubuilder_disable"] = value
+    
+    def handler_treeselect(self, selection):
+        t = time()
+        if t - self.flag_treeview_click_time < 0.1: return True
+        self.flag_treeview_click_time = t
         tree = self.xml.get_widget("treeview1")
         model = tree.get_model()
-        if value:
-            a = lambda x,y,z: self.treeviewSelect(iter=z) if (x.get_value(z,2) == value) else None
-            model.foreach(a)
-        elif iter:
-            path = model.get_path(iter)
-            tree.expand_to_path(path)
-            tree.set_cursor(path)
-            tree.scroll_to_cell(path)
-            tree.get_selection().select_iter(iter)
+        selected = model.get_iter(selection)
+        a = model.get_value(selected, 3)
+        b = model.get_value(selected, 2)
+        if b == 0: self.current_prefix = None
+        else: self.current_prefix = self.prefixes_by_id[b]
+        self.guiChange()
+        return True
+        
+    def handler_menu_open_prefix(self, *args):
+        tree = self.xml.get_widget("treeview1")
+        model, items = tree.get_selection().get_selected_rows()
+        treeiter = model.get_iter(items[0])
+        directory = model.get_value(treeiter, 5)
+        if islink(directory): directory = realpath(directory)
+        self.action_open_directory(directory)
+        
+    def handler_menu_run_executable(self, *args):
+        tree = self.xml.get_widget("treeview1")
+        model, items = tree.get_selection().get_selected_rows()
+        treeiter = model.get_iter(items[0])
+        prefix = self.prefixes_by_id[model.get_value(model.iter_parent(treeiter), 2)]
+        self.action_run_at_prefix(prefix, (
+            prefix.winepath or self.default_winepath,
+            model.get_value(treeiter, 5)))
+            
+    def handler_menu_rename_prefix(self, *args):
+        dialog = self.xml.get_widget("dialog2")
+        self.xml.get_widget("button5").set_property("visible", False) # add button
+        self.xml.get_widget("button7").set_property("visible", True) # ok button
+        tree = self.xml.get_widget("treeview1")
+        model, rows = tree.get_selection().get_selected_rows()
+        if len(rows) != 1: return
+        prefix = self.prefixes_by_id[model.get_value(model.get_iter(rows[0]), 2)]
+        default_name = path_split(prefix.path)[-1]
+        current_name = prefix["ww_name"] or default_name
+        while True: # Repeat if not name is given
+            self.xml.get_widget("entry1").set_text(current_name)
+            response = dialog.run()
+            dialog.hide()
+            if response == 1:
+                name = self.xml.get_widget("entry1").get_text().strip()
+                if name:
+                    if name == default_name: prefix["ww_name"] = None
+                    elif name != current_name: prefix["ww_name"] = name
+                    self.guiPrefix()
+                    break
+            else: break
+            
+    def handler_menu_remove_prefix(self, *args):
+        dialog = self.xml.get_widget("dialog3")
+        tree = self.xml.get_widget("treeview1")
+        model, items = tree.get_selection().get_selected_rows()
+        if len(items) == 1:
+            treeiter = model.get_iter(items[0])
+            prefix = self.prefixes_by_id[model.get_value(treeiter, 2)]
+            self.xml.get_widget("radiobutton2").set_property("sensitive", not prefix.imported)
+            self.xml.get_widget("radiobutton1").set_property("active", True)
+            response = dialog.run()
+            dialog.set_property("visible", False)
+            
+            if response == 1:
+                if (self.xml.get_widget("radiobutton2").get_property("active")
+                  and not self.xml.get_widget("radiobutton1").get_property("active")):
+                    rmtree(prefix.path)
+                elif prefix.imported:
+                    remove(prefix.path)
+                else:
+                    prefix["ww_ignore"] = "1"
+                self.prefixes_by_id.pop(id(prefix))
+                self.prefixes_by_path.pop(prefix.path)
+                self.prefixes.remove(prefix)
+                self.guiPrefix()
 
-    def unknowndir(self,*args):
-        dialog = self.xml.get_widget("dialog1")
-        response = dialog.run()
-        if response == 1:
-            self.addfilenames([self.favprefix])
-        dialog.hide()
-
-    def addfilenames(self,lista):
-        if lista:
-            a = len(self.configlines)
-            self.configlines += lista
-            for i in lista:
-                self.configsublines[i] = []
-            self.writeConfigFile()
-            self.comboInit(auto=False)
-            self.comboSet(self.configlines[-1])
-            if self.configMode:
-                self.toggleConfig(True)
-
-    def removeprefix(self,*args):
-        combo = self.xml.get_widget("combobox1")
-        model = combo.get_model()
-        dialog = gtk.MessageDialog(
-                    self.xml.get_widget("window1"),
-                    gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
-                    gtk.MESSAGE_QUESTION,
-                    gtk.BUTTONS_YES_NO,
-                    ("¿Do you really want to remove <b>%s</b> dir from prefixes list?\n(No data will be removed)" % model[combo.get_active()][0])
-                    )
-        dialog.set_property("use-markup",True)
-
-        response = dialog.run()
-        dialog.destroy()
-        if response==gtk.RESPONSE_YES:
-            model.remove(model.get_iter(combo.get_active()))
-            if self.configMode:
-                tree = self.xml.get_widget("treeview1")
-                treemodel,rows = tree.get_selection().get_selected_rows()
-                for i in rows:
-                    treemodel.remove(treemodel.get_iter(i))
-            self.configlines = [i[0] for i in model]
-            self.writeConfigFile()
-
-    def removeapp(self,*args):
+    def handler_menu_remove_executable(self, *args):
         tree = self.xml.get_widget("treeview1")
         model, items = tree.get_selection().get_selected_rows()
         for i in items:
-            iter = model.get_iter(i)
-            self.configsublines[model.get_value(model.iter_parent(iter),2)].remove(model.get_value(iter,2))
-            model.remove(iter)
-        self.writeConfigFile()
+            treeiter = model.get_iter(i)
+            treeiter_parent = model.iter_parent(treeiter)
+            prefix = self.prefixes_by_id[model.get_value(treeiter_parent, 2)]
+            prefix.remove_known_executable(model.get_value(treeiter, 5))
+        self.guiPrefix()
 
-    def getComboValue(self):
+    def handler_combo(self, *args):
         combo = self.xml.get_widget("combobox1")
         active = combo.get_active()
-        if active==-1: return None
-        return combo.get_model()[active][0]
+        if active > -1:
+            prefix = self.prefixes_by_id[combo.get_model()[active][0]]
+            self.current_prefix = prefix
+            self.guiChange()
 
-    def checkIsPrefix(self, path):
-        if not isdir(path): return False
-        ls = listdir(path)
-        for i in ("drive_c","dosdevices","user.reg","system.reg","userdef.reg"):
-            if i not in ls: return False
-        return True
-
-    def combochange(self,*args):
-        eid = "dirnotfound"
-        self.hideError(eid)
-
-        a = bool(self.xml.get_widget("combobox1").get_active() > -1)
-        self.xml.get_widget("iconview1").set_property("sensitive", False)
-        if a:
-            self.xml.get_widget("button7").set_property("sensitive", True)
-            path = self.getComboValue()
-            if isdir(path):
-                if bool(self.winebin):
-                    self.xml.get_widget("iconview1").set_property("sensitive", True)
-                    self.env["WINEPREFIX"] = path
+    def handler_quit(self,*args):
+        for i in self.killable_threads: killPopen(i)
+        if gtk.main_level() > 0: gtk.main_quit()
+        
+    def handler_delete_event(self, widget, *args):
+        widget.set_property("visible", False)
+        return gtk.TRUE
+            
+    def guiStart(self):
+        # Gui is started for first time (call this one once)
+        show = ()
+        hide = ()
+        if self.flag_mode_config:
+            show = ("button20",) # Close
+            self.xml.get_widget("expander1").set_expanded(True)
+            self.handler_show_treeview()
+        elif self.given_msi:
+            show = ("button8", "button12") # Install, Cancel
+            self.handler_show_combo()
+        elif self.given_exe:
+            show = ("button1", "button12", "vbox15") # Launch, cancel, remember
+            self.handler_show_combo()
+        elif self.given_cmd:
+            show = ("button1", "button12") # Launch, cancel
+            self.handler_show_combo()
+        else: # Nothing given (configmode)
+            show = ("button20",) # Close
+            self.xml.get_widget("expander1").set_expanded(True)
+            self.handler_show_treeview()
+        
+        for i in show: self.xml.get_widget(i).set_property("visible", True)
+        for i in hide: self.xml.get_widget(i).set_property("visible", False)
+        
+        if self.flag_remember:
+            self.xml.get_widget("checkbutton1").set_property("active", True)
+        
+        self.xml.signal_autoconnect({
+               "on_window1_destroy" : self.handler_quit,
+               "on_button12_clicked" : self.handler_quit,
+               "on_combobox1_changed" : self.handler_combo,
+               "on_button1_clicked" : self.handler_launch,
+               "on_button8_clicked" : self.handler_launch,
+               "on_button16_clicked" : self.handler_show_treeview,
+               "on_button2_clicked" : self.handler_show_combo,
+               "on_checkbutton1_toggled" : self.handler_remember,
+               "on_dialog1_delete_event" : self.handler_delete_event,
+               "on_dialog2_delete_event" : self.handler_delete_event,
+               "on_dialog3_delete_event" : self.handler_delete_event,
+               "on_iconview1_item_activated" : self.handler_iconview,
+               "on_treeview1_button_press_event" : self.handler_treebutton,
+               "on_menuitem1_activate" : self.handler_menu_newprefix,
+               "on_menuitem2_activate" : self.handler_menu_newprefix,
+               "on_menuitem6_activate" : self.handler_menu_newprefix,
+               "on_menuitem4_activate" : self.handler_menu_addprefix,
+               "on_menuitem5_activate" : self.handler_menu_addprefix,
+               "on_menuitem7_activate" : self.handler_menu_addprefix,
+               "on_menuitem10_activate" : self.handler_menu_addexe,
+               "on_menuitem11_activate" : self.handler_menu_addexe,
+               "on_menuitem15_activate" : self.handler_menu_open_prefix,
+               "on_menuitem14_activate" : self.handler_menu_run_executable,
+               "on_menuitem13_activate" : self.handler_menu_rename_prefix,
+               "on_menuitem3_activate" : self.handler_menu_remove_prefix,
+               "on_menuitem12_activate" : self.handler_menu_remove_executable,
+               "on_button3_clicked": self.handler_reset_winepath,
+               "on_button4_clicked": self.handler_reset_winemenubuilder,
+               "on_filechooserbutton1_file_set" : self.handler_set_winepath,
+               "on_checkbutton2_toggled" : self.handler_winemenubuilder_toggle,
+            })
+ 
+    def guiExecutable(self):
+        # Executable list is changed
+        self.initialize_treeview()
+ 
+    def guiPrefix(self):
+        # Prefix list is changed
+        self.initialize_combo()
+        self.initialize_treeview()
+    
+    def guiChange(self): 
+        # Gui is changed (current_prefix changed)
+        iconview = self.xml.get_widget("iconview1")
+        model = iconview.get_model()
+        if model: model.clear()
+        if isinstance(self.current_prefix, Prefix):
+            wineprefix = self.current_prefix.path
+            winepath = self.current_prefix.winepath or self.default_winepath
+            if model: toolModel(winepath, wineprefix, model)
             else:
-                self.showError(eid,"Directory not found.")
-        if self.xml.get_widget("checkbutton1").get_property("active"):
-            self.addapp()
-
-    def __quit(self,*args):
-        for i in self.killable_threads:
-            killPopen(i)
-        if gtk.main_level()>0:
-            gtk.main_quit()
-
-    def createPrefix(self, path):
-        if self.autocreateprefix:
-            p = self.execute(["wineboot","-i"])
+                iconview.set_model(toolModel(winepath, wineprefix, model))
+                iconview.set_pixbuf_column(0)
+                iconview.set_text_column(1)
+            iconview.set_property("sensitive", True)
+            self.xml.get_widget("scrolledwindow3").set_property("sensitive", True)
+            
+            # Prefix configuration
+            winepath = self.current_prefix.winepath
+            if winepath:
+                self.xml.get_widget("filechooserbutton1").set_filename(winepath)
+            else:
+                self.xml.get_widget("filechooserbutton1").unselect_all()
+            
+            self.xml.get_widget("checkbutton2").set_property("active",
+                self.current_prefix["ww_winemenubuilder_disable"] == "1")
+            
         else:
-            p = self.execute("wineprefixcreate")
-
-        pid = len(self.killable_threads)
-        self.killable_threads.append( p )
-
-        path = self.env["WINEPREFIX"]
-
-        tohide = ( "expander1", "hbox3" )
-        states = [ self.xml.get_widget(i).get_property("visible") for i in tohide ]
-
-        def wait():
-            while True:
-                poll = p.poll()
-                if (poll == 0 and self.checkIsPrefix(path)) or poll != None:
-                    break
-                sleep(0.25)
-                gtk.gdk.threads_enter()
-                self.xml.get_widget("progressbar1").pulse()
-                gtk.gdk.threads_leave()
-
-            gtk.gdk.threads_enter()
-            self.xml.get_widget("progressbar1").set_fraction(1)
-            gtk.gdk.threads_leave()
-            sleep(0.5)
-            gtk.gdk.threads_enter()
-            for i in range(len(tohide)):
-                self.xml.get_widget( tohide[i] ).set_property( "visible", states[i] )
-            self.xml.get_widget("vbox10").set_property("visible",False)
-            self.killable_threads.pop(pid)
-            self.combochange()
-            self.xml.get_widget("button10").set_property("sensitive",False)
-            gtk.gdk.threads_leave()
-
-        def terminate(*args):
-            killPopen(p)
-
-        for i in tohide:
-            self.xml.get_widget(i).set_property("visible", False)
-        self.xml.signal_autoconnect({"on_button9_clicked":terminate})
-        self.xml.get_widget("progressbar1").set_fraction(0)
-        self.xml.get_widget("label14").set_label("<b>%s</b>" % path)
-        self.xml.get_widget("vbox10").set_property("visible",True)
-        Thread(target=wait).start()
-
-    def execute(self,command):
-        return Popen((i.replace("$WINEPREFIX",self.env["WINEPREFIX"]) for i in command), env=self.env)
+            iconview.set_property("sensitive", False)
+            self.xml.get_widget("scrolledwindow3").set_property("sensitive", False)
+        
+        # Dialog buttons and error
+        error = None
+        if self.current_prefix:
+            show = True
+            winepath = self.current_prefix.winepath or self.default_winepath
+            if isinstance(self.current_prefix, BrokenPrefix):
+                error = "Prefix is broken."
+                show = False
+            elif not winepath or not checkBin(winepath):
+                error = "Wine binary not found."
+                show = False
+        else:
+            show = False
+        if error:
+            self.xml.get_widget("labelerror").set_label(error)
+            self.xml.get_widget("errorbox").set_property("visible", True)
+        else:
+            self.xml.get_widget("errorbox").set_property("visible", False)
+        self.xml.get_widget("button1").set_property("sensitive", show) # Launch
+        self.xml.get_widget("button8").set_property("sensitive", show) # Install
 
 if len(sys_argv)>1 and sys_argv[1] in ("--help","-h"):
-    print '''%s - an easy graphical tool for wineprefixing.
+    print('''%s - an easy graphical tool for wineprefixing.
     Usage:
-        pywinery [OPTIONS...] FILE [ARGs...]  Call an exe with wine.
+        pywinery [OPTIONS...] FILE [ARGs...]  Execute command on with wine.
 
     Options:
         -v, --version     Prints Wine and Pywinery's version.
         -x, --nogui       Run with autodetected prefix if possible.
-        -s, --silent      Hide winedebug messages.
+        -d, --debug       Show debug messages.
         -c, --config      Force run as configuration mode.
         -h, --help        Show this help.
-    ''' % sys_argv[0]
+    ''' % sys_argv[0])
 elif len(sys_argv)>1 and sys_argv[1] in ("--version","-v"):
-    print "Pywinery %s, wine %s." % (
+    print("Pywinery %s, wine %s." % (
         ".".join(str(i) for i in __version__),
         ".".join(str(i) for i in getWineVersion())
-        )
+        ))
 else:
     if __name__ == "__main__":
         app = Main(sys_argv)
