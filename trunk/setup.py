@@ -10,8 +10,8 @@ setup(name         = 'pywinery',
       url          = '',
       license      = 'GPLv3',
       data_files   = [
-            ('/usr/share/pywinery',['gui.glade','pywinery.svg']),
-            ('/usr/share/pixmaps',['pywinery.svg']),
+            ('/usr/share/pywinery',['gui.glade']),
+            ('/usr/share/icons/hicolor/scalable/apps',['pywinery.svg']),
             ('/usr/share/applications',["pywinery.desktop"])
                      ],
       scripts      = ['pywinery.py']
