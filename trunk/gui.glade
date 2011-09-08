@@ -16,7 +16,7 @@
     <property name="urgency_hint">True</property>
     <property name="transient_for">window1</property>
     <property name="has_resize_grip">False</property>
-    <signal name="delete_event" handler="on_dialog1_delete_event"/>
+    <signal name="delete_event" handler="on_dialog1_delete_event" swapped="no"/>
     <child internal-child="vbox">
       <widget class="GtkVBox" id="dialog-vbox1">
         <property name="visible">True</property>
@@ -122,7 +122,7 @@ Should Pywinery remember it?</property>
     <property name="type_hint">dialog</property>
     <property name="transient_for">window1</property>
     <property name="has_resize_grip">False</property>
-    <signal name="delete_event" handler="on_dialog2_delete_event"/>
+    <signal name="delete_event" handler="on_dialog2_delete_event" swapped="no"/>
     <child internal-child="vbox">
       <widget class="GtkVBox" id="dialog-vbox2">
         <property name="visible">True</property>
@@ -295,7 +295,7 @@ Imported prefixes are symlinks at the same location.</property>
     <property name="type_hint">dialog</property>
     <property name="transient_for">window1</property>
     <property name="has_resize_grip">False</property>
-    <signal name="delete_event" handler="on_dialog3_delete_event"/>
+    <signal name="delete_event" handler="on_dialog3_delete_event" swapped="no"/>
     <child internal-child="vbox">
       <widget class="GtkVBox" id="dialog-vbox3">
         <property name="visible">True</property>
@@ -453,7 +453,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
         <property name="always_show_image">True</property>
-        <signal name="activate" handler="on_menuitem1_activate"/>
+        <signal name="activate" handler="on_menuitem1_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image7">
             <property name="visible">True</property>
@@ -471,7 +471,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem4_activate"/>
+        <signal name="activate" handler="on_menuitem4_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image10">
             <property name="visible">True</property>
@@ -494,7 +494,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="use_action_appearance">False</property>
         <property name="use_underline">True</property>
         <property name="use_stock">True</property>
-        <signal name="activate" handler="on_menuitem15_activate"/>
+        <signal name="activate" handler="on_menuitem15_activate" swapped="no"/>
       </widget>
     </child>
     <child>
@@ -511,7 +511,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem2_activate"/>
+        <signal name="activate" handler="on_menuitem2_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image11">
             <property name="visible">True</property>
@@ -529,7 +529,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem5_activate"/>
+        <signal name="activate" handler="on_menuitem5_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image13">
             <property name="visible">True</property>
@@ -547,7 +547,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem10_activate"/>
+        <signal name="activate" handler="on_menuitem10_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image15">
             <property name="visible">True</property>
@@ -572,7 +572,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem3_activate"/>
+        <signal name="activate" handler="on_menuitem3_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image14">
             <property name="visible">True</property>
@@ -597,7 +597,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem13_activate"/>
+        <signal name="activate" handler="on_menuitem13_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image12">
             <property name="visible">True</property>
@@ -620,7 +620,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="use_action_appearance">False</property>
         <property name="use_underline">True</property>
         <property name="use_stock">True</property>
-        <signal name="activate" handler="on_menuitem14_activate"/>
+        <signal name="activate" handler="on_menuitem14_activate" swapped="no"/>
       </widget>
     </child>
     <child>
@@ -637,7 +637,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem6_activate"/>
+        <signal name="activate" handler="on_menuitem6_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image16">
             <property name="visible">True</property>
@@ -655,7 +655,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem7_activate"/>
+        <signal name="activate" handler="on_menuitem7_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image17">
             <property name="visible">True</property>
@@ -673,7 +673,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem11_activate"/>
+        <signal name="activate" handler="on_menuitem11_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image18">
             <property name="visible">True</property>
@@ -698,7 +698,7 @@ Imported prefixes are symlinks at the same location.</property>
         <property name="can_focus">False</property>
         <property name="use_action_appearance">False</property>
         <property name="use_stock">False</property>
-        <signal name="activate" handler="on_menuitem12_activate"/>
+        <signal name="activate" handler="on_menuitem12_activate" swapped="no"/>
         <child internal-child="image">
           <widget class="GtkImage" id="image19">
             <property name="visible">True</property>
@@ -720,7 +720,7 @@ Imported prefixes are symlinks at the same location.</property>
     <property name="icon_name">pywinery</property>
     <property name="type_hint">dialog</property>
     <property name="urgency_hint">True</property>
-    <signal name="destroy" handler="on_window1_destroy"/>
+    <signal name="destroy" handler="on_window1_destroy" swapped="no"/>
     <child>
       <widget class="GtkAlignment" id="alignment1">
         <property name="visible">True</property>
@@ -778,7 +778,7 @@ Imported prefixes are symlinks at the same location.</property>
                               <widget class="GtkComboBox" id="combobox1">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <signal name="changed" handler="on_combobox1_changed"/>
+                                <signal name="changed" handler="on_combobox1_changed" swapped="no"/>
                               </widget>
                               <packing>
                                 <property name="expand">True</property>
@@ -791,15 +791,15 @@ Imported prefixes are symlinks at the same location.</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
-                                <property name="tooltip" translatable="yes">Expand prefix list</property>
+                                <property name="tooltip" translatable="yes">Manage prefixes</property>
                                 <property name="use_action_appearance">False</property>
-                                <signal name="clicked" handler="on_button16_clicked"/>
+                                <signal name="clicked" handler="on_button16_clicked" swapped="no"/>
                                 <child>
                                   <widget class="GtkImage" id="image6">
                                     <property name="visible">True</property>
                                     <property name="can_focus">False</property>
                                     <property name="tooltip" translatable="yes">Manage prefixes</property>
-                                    <property name="stock">gtk-edit</property>
+                                    <property name="stock">gtk-zoom-in</property>
                                   </widget>
                                 </child>
                               </widget>
@@ -835,7 +835,7 @@ Imported prefixes are symlinks at the same location.</property>
                                         <property name="visible">True</property>
                                         <property name="can_focus">True</property>
                                         <property name="headers_visible">False</property>
-                                        <signal name="button_press_event" handler="on_treeview1_button_press_event"/>
+                                        <signal name="button_press_event" handler="on_treeview1_button_press_event" swapped="no"/>
                                       </widget>
                                     </child>
                                   </widget>
@@ -856,14 +856,14 @@ Imported prefixes are symlinks at the same location.</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
-                                    <property name="tooltip" translatable="yes">Short prefix view</property>
+                                    <property name="tooltip" translatable="yes">Abbreviate view</property>
                                     <property name="use_action_appearance">False</property>
-                                    <signal name="clicked" handler="on_button2_clicked"/>
+                                    <signal name="clicked" handler="on_button2_clicked" swapped="no"/>
                                     <child>
                                       <widget class="GtkImage" id="image2">
                                         <property name="visible">True</property>
                                         <property name="can_focus">False</property>
-                                        <property name="stock">gtk-ok</property>
+                                        <property name="stock">gtk-zoom-out</property>
                                       </widget>
                                     </child>
                                   </widget>
@@ -971,7 +971,7 @@ Imported prefixes are symlinks at the same location.</property>
                       <widget class="GtkExpander" id="expander1">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <signal name="activate" handler="on_expander1_activate"/>
+                        <signal name="activate" handler="on_expander1_activate" swapped="no"/>
                         <child>
                           <widget class="GtkNotebook" id="notebook1">
                             <property name="visible">True</property>
@@ -998,7 +998,7 @@ Imported prefixes are symlinks at the same location.</property>
                                         <property name="orientation">horizontal</property>
                                         <property name="row_spacing">2</property>
                                         <property name="column_spacing">0</property>
-                                        <signal name="item_activated" handler="on_iconview1_item_activated"/>
+                                        <signal name="item_activated" handler="on_iconview1_item_activated" swapped="no"/>
                                       </widget>
                                     </child>
                                   </widget>
@@ -1076,7 +1076,7 @@ Imported prefixes are symlinks at the same location.</property>
                                                     <property name="width_request">100</property>
                                                     <property name="visible">True</property>
                                                     <property name="can_focus">False</property>
-                                                    <signal name="file_set" handler="on_filechooserbutton1_file_set"/>
+                                                    <signal name="file_set" handler="on_filechooserbutton1_file_set" swapped="no"/>
                                                   </widget>
                                                   <packing>
                                                     <property name="expand">True</property>
@@ -1095,7 +1095,7 @@ Imported prefixes are symlinks at the same location.</property>
                                                 <property name="can_focus">True</property>
                                                 <property name="receives_default">True</property>
                                                 <property name="use_action_appearance">False</property>
-                                                <signal name="clicked" handler="on_button3_clicked"/>
+                                                <signal name="clicked" handler="on_button3_clicked" swapped="no"/>
                                                 <child>
                                                   <widget class="GtkImage" id="image3">
                                                     <property name="visible">True</property>
@@ -1117,7 +1117,7 @@ Imported prefixes are symlinks at the same location.</property>
                                                 <property name="can_focus">True</property>
                                                 <property name="receives_default">True</property>
                                                 <property name="use_action_appearance">False</property>
-                                                <signal name="clicked" handler="on_button4_clicked"/>
+                                                <signal name="clicked" handler="on_button4_clicked" swapped="no"/>
                                                 <child>
                                                   <widget class="GtkImage" id="image4">
                                                     <property name="visible">True</property>
@@ -1164,7 +1164,7 @@ Imported prefixes are symlinks at the same location.</property>
                                                     <property name="use_action_appearance">False</property>
                                                     <property name="image_position">bottom</property>
                                                     <property name="draw_indicator">True</property>
-                                                    <signal name="toggled" handler="on_checkbutton2_toggled"/>
+                                                    <signal name="toggled" handler="on_checkbutton2_toggled" swapped="no"/>
                                                     <child>
                                                       <placeholder/>
                                                     </child>
@@ -1246,7 +1246,7 @@ Imported prefixes are symlinks at the same location.</property>
                             <property name="receives_default">False</property>
                             <property name="use_action_appearance">False</property>
                             <property name="draw_indicator">True</property>
-                            <signal name="toggled" handler="on_checkbutton1_toggled"/>
+                            <signal name="toggled" handler="on_checkbutton1_toggled" swapped="no"/>
                           </widget>
                           <packing>
                             <property name="expand">False</property>
@@ -1289,7 +1289,7 @@ Imported prefixes are symlinks at the same location.</property>
                     <property name="receives_default">True</property>
                     <property name="use_action_appearance">False</property>
                     <property name="use_stock">True</property>
-                    <signal name="clicked" handler="on_button12_clicked"/>
+                    <signal name="clicked" handler="on_button12_clicked" swapped="no"/>
                   </widget>
                   <packing>
                     <property name="expand">False</property>
@@ -1304,7 +1304,7 @@ Imported prefixes are symlinks at the same location.</property>
                     <property name="receives_default">True</property>
                     <property name="use_action_appearance">False</property>
                     <property name="use_stock">True</property>
-                    <signal name="clicked" handler="on_button1_clicked"/>
+                    <signal name="clicked" handler="on_button1_clicked" swapped="no"/>
                     <accelerator key="r" signal="clicked" modifiers="GDK_MOD1_MASK"/>
                   </widget>
                   <packing>
@@ -1318,7 +1318,7 @@ Imported prefixes are symlinks at the same location.</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="use_action_appearance">False</property>
-                    <signal name="clicked" handler="on_button8_clicked"/>
+                    <signal name="clicked" handler="on_button8_clicked" swapped="no"/>
                     <accelerator key="r" signal="clicked" modifiers="GDK_MOD1_MASK"/>
                     <child>
                       <widget class="GtkAspectFrame" id="aspectframe5">
@@ -1376,7 +1376,7 @@ Imported prefixes are symlinks at the same location.</property>
                     <property name="receives_default">True</property>
                     <property name="use_action_appearance">False</property>
                     <property name="use_stock">True</property>
-                    <signal name="clicked" handler="on_button12_clicked"/>
+                    <signal name="clicked" handler="on_button12_clicked" swapped="no"/>
                   </widget>
                   <packing>
                     <property name="expand">False</property>
