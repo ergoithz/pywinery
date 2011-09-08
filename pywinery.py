@@ -258,26 +258,33 @@ class Prefix(object):
         return ()
         
     def add_known_executable(self, x):
-        known = self["ww_known_executables"].split(":")
         x = relativize(x, self)
-        if x not in known:
-            known.append(x)
-            self["ww_known_executables"] = ":".join(known)
+        known = self["ww_known_executables"]
+        if known: 
+            known = known.split(":")
+            if x not in known:
+                known.append(x)
+                self["ww_known_executables"] = ":".join(known)
+        else:
+            self["ww_known_executables"] = x
         
     def remove_known_executable(self, x):
-        known = self["ww_known_executables"].split(":")
-        x = relativize(x, self)
-        if x in known:
-            known.remove(x)
-            self["ww_known_executables"] = ":".join(known)
+        known = self["ww_known_executables"]
+        if known:
+            known = known.split(":")
+            x = relativize(x, self)
+            if x in known:
+                known.remove(x)
+                self["ww_known_executables"] = ":".join(known)
         
     def extend_known_executables(self, x):
-        known = self["ww_known_executables"].split(":")
+        known = self["ww_known_executables"]
+        if known: known = known.split(":")
+        else: known = []
         nold = len(known)
         for i in x:
             i = relativize(i, self)
-            if i not in known:
-                known.append(i)
+            if i not in known: known.append(i)
         if len(known) != nold: self["ww_known_executables"] = ":".join(known)
         
     @property
@@ -688,6 +695,7 @@ class Main(object):
         
     def handler_show_treeview(self, *args, **kwargs):
         self.refresh_treeview()
+        self.xml.get_widget("aspectframe1").set_property("visible", False)
         self.xml.get_widget("hbox1").set_property("visible", True)
         self.xml.get_widget("hbox3").set_property("visible", False)
         
@@ -700,10 +708,10 @@ class Main(object):
             if model.get_value(i.iter, 2) == prefix_id:
                 tree.scroll_to_cell(model.get_path(i.iter), tree.get_column(0), True, 0, 0.5)
                 break
-        
     
     def handler_show_combo(self, *args, **kwargs):
         self.refresh_combo()
+        self.xml.get_widget("aspectframe1").set_property("visible", True)
         self.xml.get_widget("hbox1").set_property("visible", False)
         self.xml.get_widget("hbox3").set_property("visible", True)
     
@@ -986,7 +994,6 @@ class Main(object):
         hide = ()
         if self.flag_mode_config:
             show = ("button20",) # Close
-            self.xml.get_widget("expander1").set_expanded(True)
             self.handler_show_treeview()
         elif self.given_msi:
             show = ("button8", "button12") # Install, Cancel
@@ -999,7 +1006,7 @@ class Main(object):
             self.handler_show_combo()
         else: # Nothing given (configmode)
             show = ("button20",) # Close
-            self.xml.get_widget("expander1").set_expanded(True)
+
             self.handler_show_treeview()
         
         for i in show: self.xml.get_widget(i).set_property("visible", True)
