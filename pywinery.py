@@ -1088,10 +1088,10 @@ class Main(object):
             show = True
             winepath = self.current_prefix.winepath or self.default_winepath
             if isinstance(self.current_prefix, BrokenPrefix):
-                error = "Prefix is broken."
+                error = "Selected prefix is unavailable."
                 show = False
             elif not winepath or not checkBin(winepath):
-                error = "Wine binary not found."
+                error = "Wine binary not found on selected prefix."
                 show = False
         else:
             show = False
