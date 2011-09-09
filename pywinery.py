@@ -53,20 +53,7 @@ def mkpath(path):
         unfinished += "%s%s" % (i, sep)
         if not isdir(unfinished):
             mkdir(unfinished)
-            
-def relativize(path, prefix):
-    path = abspath(path)
-    home = environ["HOME"]
-    if home[-1] == sep: home = home[:-1]
-    for old, new in ((prefix.path, ""), (realpath(prefix.path), ""), (home, "$HOME")):
-        if path.startswith(old): return "%s%s%s" % (new, sep if new else "", path[len(old)+1:])
-    return path
-    
-def unrelativize(path, prefix):
-    path = expandvars(path)
-    if isabs(path): return path
-    return path_join(prefix.path, path)
-    
+              
 def getPrefixes(defaults):
     configdir = expandvars("$HOME/.config/pywinery")
     newdir = expandvars("$HOME/.local/share/wineprefixes")
@@ -208,34 +195,7 @@ class GTuple(gobject.GObject):
     def __init__(self, tup):
         gobject.GObject.__init__(self)
         self.tup = tup
-    
-class BrokenPrefix(object):
-    def __init__(self, path, defaults):
-        self.winepath = None
-        self.path = path
-        self.defaults = defaults
-        self.known_executables = ()
-        self.imported = True # Only imported prefixes can be broken
         
-    def knows_executable(self, x):
-        return False
-        
-    def add_known_executable(self, x):
-        pass
-        
-    def remove_known_executable(self, x):
-        pass
-        
-    def extend_known_executables(self, x):
-        pass
-        
-    def __setitem__(self, x, y):
-        pass
-        
-    def __getitem__(self, x):
-        return self.defaults[x]
-
-
 class Prefix(object):
     @property
     def path(self): return self._path
@@ -243,54 +203,25 @@ class Prefix(object):
     @property
     def winepath(self):
         tr = self["ww_wine"]
-        if tr: return unrelativize(tr, self)
+        if tr: return self.unrelativize(tr)
         return tr
         
     @winepath.setter
     def winepath(self, x):
-        if x: self["ww_wine"] = relativize(x, self)
+        if x: self["ww_wine"] = self.relativize(x)
         else: self["ww_wine"] = self._defaults["ww_wine"]
     
     @property
     def known_executables(self):
         if self["ww_known_executables"]:
-            return tuple(unrelativize(i, self) for i in self["ww_known_executables"].split(":"))
+            return tuple(self.unrelativize(i) for i in self["ww_known_executables"].split(":"))
         return ()
         
-    def add_known_executable(self, x):
-        x = relativize(x, self)
-        known = self["ww_known_executables"]
-        if known: 
-            known = known.split(":")
-            if x not in known:
-                known.append(x)
-                self["ww_known_executables"] = ":".join(known)
-        else:
-            self["ww_known_executables"] = x
-        
-    def remove_known_executable(self, x):
-        known = self["ww_known_executables"]
-        if known:
-            known = known.split(":")
-            x = relativize(x, self)
-            if x in known:
-                known.remove(x)
-                self["ww_known_executables"] = ":".join(known)
-        
-    def extend_known_executables(self, x):
-        known = self["ww_known_executables"]
-        if known: known = known.split(":")
-        else: known = []
-        nold = len(known)
-        for i in x:
-            i = relativize(i, self)
-            if i not in known: known.append(i)
-        if len(known) != nold: self["ww_known_executables"] = ":".join(known)
-        
+            
     @property
     def imported(self):
         return islink(self._path)
-
+    
     def __init__(self, path, defaults):
         if not isabs(path):
             path = expandvars("$HOME/.local/share/wineprefixes/%s" % path)
@@ -298,7 +229,7 @@ class Prefix(object):
         self._config = path_join(path, "wrapper.cfg")
         self._defaults = defaults
         self._cache = {}
-    
+        
     def __setitem__(self, x, y):
         found = False
         del_item = False
@@ -353,6 +284,49 @@ class Prefix(object):
         if x in self._defaults: return self._defaults[x]
         raise KeyError("No variable with name %s." % x)
         
+    def relativize(self, path):
+        path = abspath(path)
+        home = environ["HOME"]
+        if home[-1] == sep: home = home[:-1]
+        for old, new in ((self.path, ""), (realpath(self.path), ""), (home, "$HOME")):
+            if path.startswith(old): return "%s%s%s" % (new, sep if new else "", path[len(old)+1:])
+        return path
+        
+    def unrelativize(self, path):
+        path = expandvars(path)
+        if isabs(path): return path
+        return path_join(self.path, path)
+        
+    def add_known_executable(self, x):
+        x = self.relativize(x)
+        known = self["ww_known_executables"]
+        if known: 
+            known = known.split(":")
+            if x not in known:
+                known.append(x)
+                self["ww_known_executables"] = ":".join(known)
+        else:
+            self["ww_known_executables"] = x
+        
+    def remove_known_executable(self, x):
+        known = self["ww_known_executables"]
+        if known:
+            known = known.split(":")
+            x = self.relativize(x)
+            if x in known:
+                known.remove(x)
+                self["ww_known_executables"] = ":".join(known)
+        
+    def extend_known_executables(self, x):
+        known = self["ww_known_executables"]
+        if known: known = known.split(":")
+        else: known = []
+        nold = len(known)
+        for i in x:
+            i = self.relativize(i)
+            if i not in known: known.append(i)
+        if len(known) != nold: self["ww_known_executables"] = ":".join(known)
+        
     def memorize(self):
         newdir = expandvars("$HOME/.local/share/wineprefixes")
         if self._path.startswith(newdir): # internal prefix
@@ -366,7 +340,23 @@ class Prefix(object):
             new_path = namer(path_join(newdir, path_split(self._path)[-1]))
     
             symlink(old_path, new_path)
-            self._path = new_path            
+            self._path = new_path   
+
+    
+
+class BrokenPrefix(Prefix):
+    def knows_executable(self, x): return False
+        
+    def add_known_executable(self, x): pass
+        
+    def remove_known_executable(self, x): pass
+        
+    def extend_known_executables(self, x): pass
+        
+    def __setitem__(self, x, y): pass
+        
+    def __getitem__(self, x): return self._defaults[x]        
+             
 
 class Main(object):            
     @classmethod
@@ -443,7 +433,7 @@ class Main(object):
                 else:
                     self.given_exe = (apath,)+tuple(args[c+1:])
                     for i in self.prefixes:
-                        if relativize(apath, i) in i["ww_known_executables"].split(":"):
+                        if i.relativize(apath) in i["ww_known_executables"].split(":"):
                             self.current_prefix = i
                             self.flag_remember = True
                             break
@@ -479,6 +469,16 @@ class Main(object):
         else:
             self.xml.get_widget("labelerror").set_label("Cannot open: exo-open nor xdg-open found.")
             self.xml.get_widget("errorbox").set_property("visible", True)
+            
+    def action_add_prefix(self, prefix):
+        self.prefixes_by_id[id(prefix)] = prefix
+        self.prefixes_by_path[prefix.path] = prefix
+        if prefix not in self.prefixes: self.prefixes.append(prefix)
+        
+    def action_remove_prefix(self, prefix):
+        del self.prefixes_by_id[id(prefix)]
+        del self.prefixes_by_path[prefix.path]
+        self.prefixes.remove(prefix)
         
     def action_run_at_prefix(self, prefix, command):
         if self.flag_mode_debug: print("Pywinery: %s" % repr(command))
@@ -507,8 +507,9 @@ class Main(object):
             if self.flag_unknown_prefix:
                 dialog = self.xml.get_widget("dialog1")
                 if dialog.run() == 1:
-                    self.prefixes.append(self.current_prefix)
                     self.current_prefix.memorize()
+                    self.action_add_prefix(self.current_prefix)
+                else: self.current_prefix = None
                 dialog.hide()
             gtk.gdk.threads_init()
             self.guiStart()
@@ -732,9 +733,7 @@ class Main(object):
                         self.default_prefix_config)
                     prefix.memorize()
                     prefix["ww_name"] = name
-                    self.prefixes_by_id[id(prefix)] = prefix
-                    self.prefixes_by_path[prefix.path] = prefix
-                    self.prefixes.append(prefix)
+                    self.action_add_prefix(prefix)
                     self.guiPrefix()
                     break
             else: break
@@ -763,9 +762,7 @@ class Main(object):
                     if prefix["ww_name"] != name: prefix["ww_name"] = name
                     if prefix["ww_ignore"] != None: prefix["ww_ignore"] = None
                     prefix.memorize()
-                    self.prefixes_by_id[id(prefix)] = prefix
-                    self.prefixes_by_path[prefix.path] = prefix
-                    self.prefixes.append(prefix)
+                    self.action_add_prefix(prefix)
                     self.guiPrefix()
                     break
             else: break
@@ -957,9 +954,7 @@ class Main(object):
                     remove(prefix.path)
                 else:
                     prefix["ww_ignore"] = "1"
-                self.prefixes_by_id.pop(id(prefix))
-                self.prefixes_by_path.pop(prefix.path)
-                self.prefixes.remove(prefix)
+                self.action_remove_prefix(prefix)
                 self.guiPrefix()
 
     def handler_menu_remove_executable(self, *args):
@@ -1047,6 +1042,7 @@ class Main(object):
                "on_filechooserbutton1_file_set" : self.handler_set_winepath,
                "on_checkbutton2_toggled" : self.handler_winemenubuilder_toggle,
             })
+        self.guiChange()
  
     def guiExecutable(self):
         # Executable list is changed
@@ -1062,7 +1058,10 @@ class Main(object):
         iconview = self.xml.get_widget("iconview1")
         model = iconview.get_model()
         if model: model.clear()
-        if isinstance(self.current_prefix, Prefix):
+        if self.current_prefix is None or isinstance(self.current_prefix, BrokenPrefix):
+            iconview.set_property("sensitive", False)
+            self.xml.get_widget("scrolledwindow3").set_property("sensitive", False)
+        else:
             wineprefix = self.current_prefix.path
             winepath = self.current_prefix.winepath or self.default_winepath
             if model: toolModel(winepath, wineprefix, model)
@@ -1081,11 +1080,7 @@ class Main(object):
                 self.xml.get_widget("filechooserbutton1").unselect_all()
             
             self.xml.get_widget("checkbutton2").set_property("active",
-                self.current_prefix["ww_winemenubuilder_disable"] == "1")
-            
-        else:
-            iconview.set_property("sensitive", False)
-            self.xml.get_widget("scrolledwindow3").set_property("sensitive", False)
+                self.current_prefix["ww_winemenubuilder_disable"] == "1")           
         
         # Dialog buttons and error
         error = None
