@@ -459,7 +459,7 @@ class Main(object):
                                 break
                             sp.pop()
             else:
-                self.given_cmd = args[c:]
+                self.given_cmd = tuple(args[c:])
     
     def action_open_directory(self, directory):
         for i in ("xdg-open", ):
