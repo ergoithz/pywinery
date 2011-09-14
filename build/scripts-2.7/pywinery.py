@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 '''
     This program is free software: you can redistribute it and/or modify
@@ -91,7 +91,7 @@ def getPrefixes(defaults):
                 end = key.split(sep)[-1]                
                 prefix = Prefix(key, defaults)
                 prefix["ww_name"] = end
-                prefix.extend_known_executables(values)
+                prefix.extend_known_executables(configlines[j])
                 prefix.memorize()
         remove(old)
 

@@ -1,0 +1,20 @@
+Package: pywinery
+Version: 0.2-0
+Architecture: all
+Maintainer: Felipe A. Hernandez <spayder26@gmail.com>
+Installed-Size: 312
+Depends: python, python-central (>= 0.6.11), python-glade2 (>= 2.4), python-gtk2 (>= 2.4), xdg-utils
+Recommends: wine, winetricks
+Section: utils
+Priority: optional
+Homepage: http://code.google.com/p/pywinery
+Description: Simple wineprefix manager and launcher
+ Pywinery is a simple and easy-to-use wine prefix management tool.
+ It can be used to run exe files working as wine launcher.
+ It's written in Python and uses the Gtk toolkit.
+ .
+ Features:
+   * Simple dialog interface.
+   * Shortcuts to winecfg, wine cmd, winetricks and more.
+   * Easy prefix creation and management, BottleSpec compliant.
+Python-Version: all
