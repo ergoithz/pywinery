@@ -14,7 +14,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
-__version__ = (0, 2, 0)
+__version__ = (0, 2, 1)
 __author__ = "Felipe A. Hernandez <spayder26@gmail.com>"
 
 from sys import exit as sys_exit, argv as sys_argv, stderr
