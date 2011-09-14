@@ -1,3 +1,9 @@
+pywinery (0.2-1) testing; urgency=high
+
+  * Fixed issue#10.
+  
+ -- Felipe A. Hernandez <spayder26@gmail.com>  Wed, 7 Sep 2010 17:04:00 +0000
+
 pywinery (0.2-0) testing; urgency=low
 
   * GUI simplification: Prefix list operations via context menu.
