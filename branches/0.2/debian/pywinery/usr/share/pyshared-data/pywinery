@@ -1,8 +1,0 @@
-[python-package]
-format = 1
-python-version = all
-[pycentral]
-version = 0.6.11
-include-links = 0
-[files]
-/usr/share/pyshared/pywinery-0.1.2.egg-info=f
