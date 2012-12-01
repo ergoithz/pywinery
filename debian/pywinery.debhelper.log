@@ -1,3 +1,4 @@
+dh_prep
 dh_installdirs
 dh_installdirs
 dh_installdocs
@@ -16,6 +17,7 @@ dh_installlogcheck
 dh_installchangelogs
 dh_installudev
 dh_lintian
+dh_bugfiles
 dh_install
 dh_link
 dh_installmime

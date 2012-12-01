@@ -1,7 +1,7 @@
 Source: pywinery
 Maintainer: Felipe A. Hernandez <spayder26@gmail.com>
 Build-Depends: debhelper (>= 5.0.38)
-Build-Depends-Indep: cdbs (>= 0.4.43), python-dev (>= 2.4), python (>= 2.4)
+Build-Depends-Indep: cdbs (>= 0.4.43), python-dev (>= 2.6), python (>= 2.6)
 Standards-Version: 3.7.2
 XS-Python-Version: all
 Original-Maintainer: Felipe A. Hernandez <spayder26@gmail.com>
@@ -13,8 +13,8 @@ Section: utils
 Priority: optional
 Installed-Size: 216
 Architecture: all
-Depends: ${python:Depends}, python-glade2 (>=2.4), python-gtk2 (>=2.4), xdg-utils
-Recommends: wine, winetricks
+Depends: ${python:Depends}, python-gobject (>=3.4), xdg-utils
+Recommends: wine, winetricks, icoutils
 XB-Python-Version: ${python:Versions}
 Description: Simple wineprefix manager and launcher
  Pywinery is a simple and easy-to-use wine prefix management tool.
