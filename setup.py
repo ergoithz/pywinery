@@ -3,7 +3,7 @@
 from distutils.core import setup
  
 setup(name         = 'pywinery',
-      version      = '0.1.2',
+      version      = '0.2.1',
       description  = 'Wine prefix manager and launcher',
       author       = 'Spayder26',
       author_email = '<spayder26@gmail.com>',
