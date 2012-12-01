@@ -1,0 +1,32 @@
+# Pywinery
+# Copyright (C) 2012 Felipe A. Hernandez
+# This file is distributed under the same license as the Pywinery package.
+# Felipe A. Hernandez <spayder26@gmail.com>, 2012.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Pywinery 0.2.0\n"
+"Report-Msgid-Bugs-To: https://code.google.com/p/pywinery/issues \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Felipe A. Hernandez <spayder26@gmail.com>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "cli_test"
+msgstr "Hello world!"
+
+msgid "remember_prefix"
+msgstr "Hello world!"
+
+msgid "dialog_select_prefix_directory_title"
+msgstr "Select prefix directory"
+
+msgid "tab_properties"
+msgstr "Properties"
+
+msgid "tab_apps"
+msgstr "Applications"
+
