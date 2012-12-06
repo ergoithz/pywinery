@@ -51,6 +51,10 @@ _ = locale.gettext
 # Trash pipe for subproccess functions
 DEVNULL = open(os.devnull, "a")
 
+# Environ with no lang (for output parsing)
+CENV = environ.copy()
+CENV["LANG"] = "c"
+
 # ELF header struct
 ELF = struct.Struct("=4sBBBBBxxxxxxx")
 
@@ -76,10 +80,15 @@ def alternative_if_exists(path):
         temptative = "%s_%d" % (path, counter)
     return temptative
 
+def move_to_trash(path):
+    Gio.File.new_for_path(path).trash(None)
+
 # Enviroment's detection and actions
 def getBin(name):
     try:
-        return subprocess.check_output(("which", name), stderr=DEVNULL).strip() or None
+        return subprocess.check_output(
+            ("which", name), env=CENV, stderr=DEVNULL
+            ).strip() or None
     except subprocess.CalledProcessError:  # Non-zero rcode
         return None
 
@@ -92,7 +101,9 @@ def wineVersion():
     if not checkBin("wine"):
         return None
     try:
-        return subprocess.check_output(("wine", "--version"), stderr=DEVNULL).strip() or None
+        return subprocess.check_output(
+            ("wine", "--version"), env=CENV, stderr=DEVNULL
+            ).strip() or None
     except subprocess.CalledProcessError:  # Non-zero rcode
         return None
 
@@ -158,6 +169,20 @@ class CallbackList(list):
                     wrapped = functools.partial(self.__wrapper__, getattr(self, attr), cb)
                     setattr(self, attr, wrapped)
 
+class ExeInfoExtractor(object):
+    '''
+    Try to extract the icon from a exe resources.
+    '''
+    def __init__(self):
+        self._wrestool = getBin("wrestool")
+        self._info_cache = {}
+
+    def extract(self, path):
+        pass
+
+    def get_from_cache(path):
+        pass
+
 class ExeIconExtractor(object):
     '''
     Try to extract the icon from a exe resources.
@@ -190,8 +215,8 @@ class ExeIconExtractor(object):
         try:
             resources = subprocess.check_output(
                 (self._wrestool, "-l", path),
-                stderr=DEVNULL
-                ).strip().split(os.linesep)
+                env=CENV, stderr=DEVNULL
+                ).strip().splitlines()
         except subprocess.CalledProcessError: # Non-zero rcode
             fallback = self._default_icon(path, icon_size)
             self._pixbuf_cache[path, icon_size] = fallback
@@ -209,7 +234,7 @@ class ExeIconExtractor(object):
                 try:
                     data = subprocess.check_output(
                         (self._wrestool, "-x", "--name=%(--name)s" % line, path),
-                        stderr=DEVNULL
+                        env=CENV, stderr=DEVNULL
                         ).strip()
                     if not data:
                         continue
@@ -254,6 +279,63 @@ class ExeIconExtractor(object):
         Return only a cache icon, or a fallback one.
         '''
         return self._pixbuf_cache.get((path, icon_size), self._default_icon(path, icon_size))
+
+# FIXME(spayder26): remove when fixed
+# User xrandr to protect desktop resolution from bug
+# http://bugs.winehq.org/show_bug.cgi?id=10841
+# http://wiki.winehq.org/FAQ#head-acb200594b5bcd19722faf6fd34b60cc9c2f237b
+class ResolutionFixer(object):
+    def __init__(self):
+        self._xrandr = getBin("xrandr")
+        self._resolutions = {}
+
+    def get_resolutions(self):
+        if self._xrandr is None:
+            return
+        lines = subprocess.check_output(
+            (self._xrandr, "--query"),
+            env=CENV, stderr=DEVNULL
+            ).splitlines()
+        current_screen = None
+        current_resolution = None
+        for line in lines:
+            if line.startswith("Screen"):
+                if current_screen:
+                    yield current_screen, current_resolution
+                screen, data = line.split(":")
+                current_screen = int(screen.split()[-1])
+                current_resolution = [None, None]
+            else:
+                line = line.strip().split()
+                if "+" in line[-1]:
+                    current_resolution[0] = tuple(int(i) for i in line[0].split("x"))
+                if "*" in line[-1]:
+                    current_resolution[1] = tuple(int(i) for i in line[0].split("x"))
+        if not current_screen is None:
+            yield current_screen, current_resolution
+
+    def clear(self):
+        self._resolutions.clear()
+
+    def backup(self):
+        if self._xrandr and not self._resolutions:
+            self._resolutions.update(self.get_resolutions())
+
+    def restore(self):
+        if self._xrandr is None:
+            return
+        for screen, (currsize, realsize) in self.get_resolutions():
+            oldcurrsize, oldrealsize = self._resolutions.get(screen, (currsize, realsize))
+            if currsize == oldcurrsize and realsize == oldrealsize:
+                continue
+            width, height = oldcurrsize
+            try:
+                subprocess.check_call(
+                    (self._xrandr, "--screen", "%d" % screen, "--size", "%dx%d" % (width, height)),
+                    env=CENV, stderr=DEVNULL
+                    )
+            except BaseException as e:
+                logging.exception(e)
 
 def newline(fileobj):
     '''
@@ -405,14 +487,18 @@ class Prefix(object):
         '''
         return os.path.isdir(self._path)
 
-    def __init__(self, path, defaults, cb=None):
+    @property
+    def running_commands(self):
+        return self._runningcount
+
+    callback = None
+    def __init__(self, path, defaults):
         if not os.path.isabs(path):
             path = os.path.join(os.path.expandvars(PREFIX_PATH), path)
         self._path = path
         self._config = os.path.join(path, "wrapper.cfg")
         self._defaults = defaults
         self._cache = {} # Config cache
-        self._cb = cb # Callback when prefix changes
         self._unsaved = [] # Unsaved changes
 
     def __del__(self):
@@ -529,11 +615,30 @@ class Prefix(object):
             if self._unsaved:
                 del self._unsaved[:]
         # Run callback
-        if self._cb:
-            self._cb(self)
+        if self.callback:
+            self.callback(self)
 
     def _update_known_executables(self, exelist):
         self["ww_known_executables"] = ":".join(i.replace(":","\\:") for i in exelist)
+
+    _runningcount = 0
+    _resolution_fixer = None
+    def _fixes_initialize(self, command):
+        if self._resolution_fixer is None:
+            self._resolution_fixer = ResolutionFixer()
+        self._resolution_fixer.backup()
+        self._runningcount += 1
+
+    def _fixes_watch(self, popen):
+        rcode = popen.poll()
+        if rcode is None:
+            pass
+        else:
+            self._resolution_fixer.restore()
+            self._resolution_fixer.clear()
+            self._runningcount -= 1
+            return False
+        return True
 
     def relativize(self, path):
         path = os.path.abspath(path)
@@ -550,33 +655,32 @@ class Prefix(object):
         return path if os.path.isabs(path) else os.path.join(self.path, path)
 
     def wine(self, command, env=None, debug=False):
-        winepath = self.winepath or self["default_winepath"]
-        return self.run((winepath,)+command, env, debug)
+        winepath = self["ww_wine"] or self["default_winepath"]
+        self._fixes_initialize(command)
+        popen = self.run((winepath,)+command, env, debug)
+        GLib.timeout_add(500, functools.partial(self._fixes_watch, popen))
+        return popen
 
     def run(self, command, env=None, debug=False):
         '''
         Run any command in prefix environment.
         '''
         logging.debug("Run: %s" % repr(command))
-        if env is None:
-            env = os.environ.copy()
-        else:
-            env = env.copy()
-
+        env = os.environ.copy() if env is None else env.copy()
         if "WINEDLLOVERRIDES" in env:
             dlloverrides = env["WINEDLLOVERRIDES"].split(";")
         else:
             dlloverrides = []
-
         dlloverrides.append(
             "winemenubuilder.exe=%s" % (
                 "d" if self.winemenubuilder_disable else "n"))
-
         env.update({
             "WINEARCH": self.arch,
             "WINEDEBUG": "+all" if debug else "-all",
             "WINEDLLOVERRIDES": ";".join(dlloverrides),
-            "WINEPREFIX": self.path
+            "WINEPREFIX": self.path,
+            "WINESERVER": self["ww_wineserver"] or self["default_wineserverpath"],
+            "WINELOADER": self["ww_wine"] or self["default_winepath"]
             })
         return subprocess.Popen(command, env = env)
 
@@ -670,7 +774,7 @@ class Prefix(object):
             rpath = os.path.realpath(os.path.join(newdir, i))
             # Must exists
             if os.path.isdir(rpath):
-                prefix = Prefix(apath, defaults, cb)
+                prefix = Prefix(apath, defaults)
                 if prefix["ww_ignore"]:
                     continue
                 yield prefix
@@ -686,7 +790,6 @@ class BrokenPrefix(Prefix):
 
     def __getitem__(self, x):
         return self._defaults[x]
-
 
 WINE_TOOLS = {
     "winetricks": (
@@ -730,6 +833,8 @@ class Main(Gtk.Application):
     @current_prefix.setter
     def current_prefix(self, v):
         if v != self._current_prefix:
+            if v and v.callback is None:
+                v.callback = self.action_prefix_changed
             self._current_prefix = v
             self.action_prefix_changed()
 
@@ -772,6 +877,7 @@ class Main(Gtk.Application):
 
         self.default_prefix_config = {
             "default_winepath": self.default_winepath,
+            "default_wineserverpath": self.default_wineserverpath,
             "ww_name": None,
             "ww_known_executables" : "",
             "ww_wine": None,
@@ -780,7 +886,7 @@ class Main(Gtk.Application):
             "ww_ignore" : None,
             "ww_arch": "win32"
             }
-        self.prefixes = list(Prefix.iter_all(self.default_prefix_config, cb=self.action_prefix_changed))
+        self.prefixes = list(Prefix.iter_all(self.default_prefix_config))
         self.prefixes_by_path = dict((i.path, i) for i in self.prefixes)
 
         self.default_environment = environ.copy()
@@ -839,10 +945,10 @@ class Main(Gtk.Application):
                             break
                     else:
                         # New prefix search on directory hierarchy
-                        sp = apath.split(sep)[:-1]
+                        sp = apath.split(os.sep)[:-1]
                         while len(sp) > 1:
-                            lookdir = sep.join(sp)
-                            lookdir_content = listdir(lookdir)
+                            lookdir = os.sep.join(sp)
+                            lookdir_content = os.listdir(lookdir)
                             if (
                               "system.reg" in lookdir_content and
                               "drive_c" in lookdir_content and
@@ -882,11 +988,6 @@ class Main(Gtk.Application):
             elif rpath in known:
                 known.remove(rpath)
         self.current_prefix.wine(command, env=self.default_environment, debug=self.flag_mode_debug)
-
-    # TODO
-    def action_remove_prefix(self, prefix):
-        del self.prefixes_by_path[prefix.path]
-        self.prefixes.remove(prefix)
 
     def run(self):
         Gtk.Application.run(self, None)
@@ -986,52 +1087,55 @@ class Main(Gtk.Application):
                 break
         return (None, None)
 
-    # TODO
-    def handler_menu_addexe(self, *args):
-        fil = gtk.FileFilter()
-        fil.set_name("Windows executable")
-        fil.add_pattern("*.exe")
-        fil.add_pattern("*.bat")
-        fil.add_pattern("*.com")
-        dialog1 = gtk.FileChooserDialog(
-            "Select executable or executables",
-            self.xml.get_widget("window1"),
-            gtk.FILE_CHOOSER_ACTION_OPEN,
-            (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_ADD, gtk.RESPONSE_OK))
+    def handle_add_known_executable(self, widget):
+        filefilter = Gtk.FileFilter()
+        filefilter.set_name("Windows executable")
+        filefilter.add_pattern("*.exe")
+        filefilter.add_pattern("*.bat")
+        filefilter.add_pattern("*.com")
+        dialog1 = Gtk.FileChooserDialog(
+            _("Choose a windows executable"),
+            self["dialog_config"],
+            Gtk.FileChooserAction.OPEN,
+            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_ADD, Gtk.ResponseType.OK))
+        dialog1.add_filter(filefilter)
         dialog1.set_local_only(True)
-        dialog1.set_select_multiple(True)
-        dialog1.add_filter(fil)
-        response = dialog1.run()
-        dialog1.hide()
-        if response == gtk.RESPONSE_OK:
-            tree = self.xml.get_widget("treeview1")
-            model, items = tree.get_selection().get_selected_rows()
-            treeiter = model.get_iter(items[0])
-            row_type = model.get_value(treeiter, 3)
-            prefix_id = None
-            if row_type  == self.constant_treeview_prefix:
-                prefix_id = model.get_value(treeiter, 2)
-            elif row_type in (self.TREEVIEW_BROKEN_EXECUTABLE,
-              self.TREEVIEW_EXECUTABLE):
-                prefix_id = model.get_value(model.iter_parent(treeiter), 2)
-            if prefix_id:
-                prefix = self.prefixes_by_id[prefix_id]
-                filenames = dialog1.get_filenames()
-                if filenames:
-                    prefix.extend_known_executables(filenames)
-                    self.guiExecutable()
+        while True:
+            response = dialog1.run()
+            dialog1.hide()
+            if response == Gtk.ResponseType.OK:
+                filenames = [i for i in dialog1.get_filenames() if os.path.isfile(i)]
+                self.current_prefix.known_executables.extend(filenames)
+                break
+            else:
+                break
         dialog1.destroy()
 
-    # TODO
-    def handler_menu_remove_executable(self, *args):
-        tree = self.xml.get_widget("treeview1")
-        model, items = tree.get_selection().get_selected_rows()
-        for i in items:
-            treeiter = model.get_iter(i)
-            treeiter_parent = model.iter_parent(treeiter)
-            prefix = self.prefixes_by_id[model.get_value(treeiter_parent, 2)]
-            prefix.remove_known_executable(model.get_value(treeiter, 5))
-        self.guiPrefix()
+    def handle_iconview_keypress(self, widget, event):
+        if event.keyval == Gdk.KEY_Delete:
+            model = self["iconview2"].get_model()
+            for row in self["iconview2"].get_selected_items():
+                self.current_prefix.known_executables.remove(model[row][3])
+
+    def handle_treeview_keypress(self, widget, event):
+        if event.keyval == Gdk.KEY_Delete:
+            selection = widget.get_selection()
+            # Prefix removal
+            model, paths = selection.get_selected_rows()
+            blacklist = []
+            for path in paths:
+                prefix = self.prefixes_by_path.pop(model[path][0])
+                self.prefixes.remove(prefix)
+                move_to_trash(prefix.path)
+                blacklist.append(model[path].iter)
+            # Other row selection
+            for row in model:
+                if row[0] and not row.iter in blacklist:
+                    self.current_prefix = self.prefixes_by_path[row[0]]
+                    break
+            else:
+                self.current_prefix = None
+            self.guiPrefix()
 
     def handle_remember(self, *args):
         self.flag_remember = self["checkbutton1"].get_property("active")
@@ -1058,7 +1162,7 @@ class Main(Gtk.Application):
         self.current_prefix.winemenubuilder_disable = widget.get_property("active")
 
     _combo_internal_change = False
-    def aux_handler_combo(self, row, dialog):
+    def aux_handler_combo(self, row, dialog, allow_internals=True):
         '''
 
         Args:
@@ -1076,7 +1180,7 @@ class Main(Gtk.Application):
             path = row[0]
             self.current_prefix = self.prefixes_by_path[path]
             internal = False
-        elif action == self.LIST_NEW:
+        elif allow_internals and action == self.LIST_NEW:
             name, arch = self.aux_dialog_prefix_name(
                 arch=self.default_arch,
                 new=True,
@@ -1085,15 +1189,14 @@ class Main(Gtk.Application):
             if name:
                 prefix = Prefix(
                     alternative_if_exists("$HOME/.local/share/wineprefixes/%s" % name),
-                    self.default_prefix_config,
-                    self.action_prefix_changed
+                    self.default_prefix_config
                     )
                 prefix.name = name # Must be setted before save
                 prefix.arch = arch
                 new_prefix = prefix
-        elif action == self.LIST_ADD:
+        elif allow_internals and action == self.LIST_ADD:
             dialog1 = Gtk.FileChooserDialog(
-                _("dialog_select_prefix_directory_title"),
+                _("Select prefix directory"),
                 self["dialog_main"],
                 Gtk.FileChooserAction.SELECT_FOLDER,
                 (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_ADD, Gtk.ResponseType.OK))
@@ -1105,8 +1208,7 @@ class Main(Gtk.Application):
                     filename = dialog1.get_filename()
                     prefix = Prefix(
                         os.path.abspath(filename),
-                        self.default_prefix_config,
-                        self.action_prefix_changed
+                        self.default_prefix_config
                         )
                     name, arch = self.aux_dialog_prefix_name(
                         prefix.name,
@@ -1138,6 +1240,8 @@ class Main(Gtk.Application):
         if prefix is None:
             # No hay prefijo seleccionado
             self["notebook1"].set_property("sensitive", False)
+            self._treeview_last_index = -1
+            self._treeview_last = None
         elif prefix == self.current_prefix and self.gui:
             self["notebook1"].set_property("sensitive", True)
             prefixpos = -1
@@ -1219,10 +1323,12 @@ class Main(Gtk.Application):
                 winepath = self.current_prefix.winepath or self.default_winepath
                 if winepath != self["filechooserbutton1"].get_filename():
                     self["filechooserbutton1"].set_filename(winepath)
+
                 wineserverpath = self.current_prefix.wineserverpath or self.default_wineserverpath
                 if wineserverpath != self["filechooserbutton1"].get_filename():
                     self["filechooserbutton2"].set_filename(wineserverpath)
                 self.action_gui_executables()
+
 
     _combo_last = -1
     def handle_combo_change(self, widget, user_data=None):
@@ -1232,25 +1338,36 @@ class Main(Gtk.Application):
         if active != self._combo_last:
             internal = True
             if active > -1:
-                internal = self.aux_handler_combo(self["prefixstore"][active], self["dialog_main"])
+                internal = self.aux_handler_combo(
+                    self["prefixstore"][active],
+                    self["dialog_main"])
             if internal:
                 self["combobox1"].set_active(self._combo_last)
             else:
                 self._combo_last = active
 
-    _treeview_last_index = -1
+    _treeview_last_index = -2
     _treeview_last = None
     def handle_treeview_change(self, widget, user_data=None):
         if self._model_work:
             return
-        path, column = widget.get_cursor()
+        selection = widget.get_selection()
+        model, paths = selection.get_selected_rows()
+        if not paths:
+            return
+        #path, column = widget.get_cursor()
+        path = paths[0]
         indices = path.get_indices() if path else None
         if indices and indices[0] != self._treeview_last_index:
             internal = True
             if path:
-                internal = self.aux_handler_combo(self["prefixstore"][path], self["dialog_config"])
+                internal = self.aux_handler_combo(
+                    self["prefixstore"][path],
+                    self["dialog_config"],
+                    self._treeview_last_index != -2)
             if internal:
                 if self._treeview_last is None:
+                    self._treeview_last_index = -1
                     self["treeview1"].get_selection().unselect_all()
                 else:
                     self["treeview1"].set_cursor(self._treeview_last)
@@ -1268,10 +1385,17 @@ class Main(Gtk.Application):
         if self.flag_config_mode:
             self.quit()
 
+    def _app_quit(self):
+        for prefix in self.prefixes:
+            if prefix.running_commands > 0:
+                return True
+        Gtk.Application.quit(self)
+        return False
+
     def quit(self):
         self["dialog_main"].hide()
         self["dialog_config"].hide()
-        Gtk.Application.quit(self)
+        GLib.idle_add(self._app_quit)
 
     def handle_delete(self, widget, *args):
         '''
@@ -1302,6 +1426,19 @@ class Main(Gtk.Application):
 
         self["combobox1"].set_row_separator_func(self.aux_separator_func, None)
         self["treeview1"].set_row_separator_func(self.aux_separator_func, None)
+
+        if self.flag_unknown_prefix:
+            response = self["dialog_remember"].run()
+            if response == 1:
+                # Register prefix
+                prefix = self.current_prefix
+                prefix.save()
+                self.prefixes.append(prefix)
+                self.prefixes_by_path[prefix.path] = prefix
+            else:
+                # Forget current prefix
+                self.current_prefix = None
+
         self.guiPrefix()
 
         if self.flag_config_mode:
@@ -1310,10 +1447,12 @@ class Main(Gtk.Application):
             self["dialog_config"].set_property("skip-taskbar-hint", False)
             self.add_window(self["dialog_config"])
             self["dialog_config"].set_property("visible", True)
+            self["dialog_config"].set_icon_name("pywinery")
         else:
             self["scrolledwindow2"].set_property("visible", False)
             self.add_window(self["dialog_main"])
             self["dialog_main"].set_property("visible", True)
+            self["dialog_config"].set_icon_name("gtk-preferences")
 
         # Selecting current prefix
         self.action_prefix_changed()
@@ -1411,11 +1550,9 @@ class Main(Gtk.Application):
             self._update_iconviews = True
         else:
             self["iconview1"].set_property("item-width", -1)
-        show_executables = bool(known_executables)
+
         self["iconview1"].set_property("expand", not show_executables)
-        # TODO(spayder26): enable this along with feature 'add executable dialog'
-        # self["label10"].set_label(_("Known executables") if show_executables else _("No known executables"))
-        self["box9"].set_property("visible", show_executables)
+        self["label10"].set_label(_("Known executables") if show_executables else _("No known executables"))
         self["iconview2"].set_property("visible", show_executables)
 
     _model_work = False
@@ -1429,8 +1566,6 @@ class Main(Gtk.Application):
         # Combobox initialization
         model = self["prefixstore"]
         model.clear()
-        #for i in model:
-        #    model.remove(i.iter)
 
         names = [prefix.name for prefix in self.prefixes]
         for prefix in sorted(self.prefixes, cmp=lambda x, y: locale.strcoll(x.name, y.name)):
@@ -1447,8 +1582,8 @@ class Main(Gtk.Application):
         if self.prefixes: # Separator
             model.append((None, None, None, None, self.LIST_SEPARATOR))
 
-        model.append((None, Gtk.STOCK_ADD, "Add existing prefix", None, self.LIST_ADD))
-        model.append((None, Gtk.STOCK_NEW, "Create new prefix", None, self.LIST_NEW))
+        model.append((None, Gtk.STOCK_ADD, _("Add existing prefix"), None, self.LIST_ADD))
+        model.append((None, Gtk.STOCK_NEW, _("Create new prefix"), None, self.LIST_NEW))
         self._model_work = False
 
 if __name__ == "__main__":

@@ -220,7 +220,7 @@
     <property name="modal">True</property>
     <property name="window_position">center</property>
     <property name="destroy_with_parent">True</property>
-    <property name="icon_name">pywinery</property>
+    <property name="icon_name">gtk-preferences</property>
     <property name="type_hint">dialog</property>
     <property name="skip_taskbar_hint">True</property>
     <property name="transient_for">dialog_main</property>
@@ -240,6 +240,7 @@
                 <property name="label">gtk-close</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="has_focus">True</property>
                 <property name="receives_default">True</property>
                 <property name="use_stock">True</property>
                 <signal name="clicked" handler="handle_button_hide_config" swapped="no"/>
@@ -272,13 +273,14 @@
                 <child>
                   <object class="GtkTreeView" id="treeview1">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
                     <property name="model">prefixstore</property>
                     <property name="headers_visible">False</property>
                     <property name="headers_clickable">False</property>
                     <property name="search_column">0</property>
                     <property name="show_expanders">False</property>
                     <signal name="cursor-changed" handler="handle_treeview_change" swapped="no"/>
+                    <signal name="key-press-event" handler="handle_treeview_keypress" swapped="no"/>
                     <child internal-child="selection">
                       <object class="GtkTreeSelection" id="treeview-selection"/>
                     </child>
@@ -408,26 +410,6 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkLabel" id="label1">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="xpad">5</property>
-                        <property name="ypad">5</property>
-                        <property name="label" translatable="yes">Wine executable</property>
-                        <property name="single_line_mode">True</property>
-                        <attributes>
-                          <attribute name="weight" value="bold"/>
-                        </attributes>
-                      </object>
-                      <packing>
-                        <property name="left_attach">0</property>
-                        <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
-                      </packing>
-                    </child>
-                    <child>
                       <object class="GtkBox" id="box8">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
@@ -441,7 +423,7 @@
                             <property name="xalign">1</property>
                             <property name="yalign">1</property>
                             <property name="xpad">5</property>
-                            <property name="label" translatable="yes">Disable winemenubuilder</property>
+                            <property name="label" translatable="yes">Disable menu integration</property>
                             <property name="single_line_mode">True</property>
                             <attributes>
                               <attribute name="weight" value="bold"/>
@@ -475,7 +457,7 @@
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
-                        <property name="top_attach">4</property>
+                        <property name="top_attach">2</property>
                         <property name="width">1</property>
                         <property name="height">1</property>
                       </packing>
@@ -484,6 +466,7 @@
                       <object class="GtkBox" id="box10">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
+                        <property name="valign">center</property>
                         <property name="spacing">2</property>
                         <child>
                           <object class="GtkFileChooserButton" id="filechooserbutton1">
@@ -524,7 +507,7 @@
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
-                        <property name="top_attach">2</property>
+                        <property name="top_attach">4</property>
                         <property name="width">1</property>
                         <property name="height">1</property>
                       </packing>
@@ -544,27 +527,7 @@
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
-                        <property name="top_attach">4</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel" id="label11">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="xpad">5</property>
-                        <property name="ypad">5</property>
-                        <property name="label" translatable="yes">Wineserver executable</property>
-                        <property name="single_line_mode">True</property>
-                        <attributes>
-                          <attribute name="weight" value="bold"/>
-                        </attributes>
-                      </object>
-                      <packing>
-                        <property name="left_attach">0</property>
-                        <property name="top_attach">3</property>
+                        <property name="top_attach">2</property>
                         <property name="width">1</property>
                         <property name="height">1</property>
                       </packing>
@@ -573,6 +536,7 @@
                       <object class="GtkBox" id="box11">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
+                        <property name="valign">center</property>
                         <property name="spacing">2</property>
                         <child>
                           <object class="GtkFileChooserButton" id="filechooserbutton2">
@@ -613,10 +577,122 @@
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
-                        <property name="top_attach">3</property>
+                        <property name="top_attach">5</property>
                         <property name="width">1</property>
                         <property name="height">1</property>
                       </packing>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="box12">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="margin_top">5</property>
+                        <property name="margin_bottom">5</property>
+                        <property name="orientation">vertical</property>
+                        <child>
+                          <object class="GtkLabel" id="label1">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <property name="xalign">1</property>
+                            <property name="yalign">1</property>
+                            <property name="xpad">5</property>
+                            <property name="label" translatable="yes">Wineloader</property>
+                            <property name="single_line_mode">True</property>
+                            <attributes>
+                              <attribute name="weight" value="bold"/>
+                            </attributes>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="label12">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <property name="halign">end</property>
+                            <property name="xalign">1</property>
+                            <property name="yalign">0</property>
+                            <property name="xpad">5</property>
+                            <property name="label" translatable="yes">&lt;small&gt;Wine process launcher&lt;/small&gt;</property>
+                            <property name="use_markup">True</property>
+                            <property name="justify">right</property>
+                            <property name="wrap">True</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="left_attach">0</property>
+                        <property name="top_attach">4</property>
+                        <property name="width">1</property>
+                        <property name="height">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="box13">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="margin_top">5</property>
+                        <property name="margin_bottom">5</property>
+                        <property name="orientation">vertical</property>
+                        <child>
+                          <object class="GtkLabel" id="label11">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <property name="xalign">1</property>
+                            <property name="yalign">1</property>
+                            <property name="xpad">5</property>
+                            <property name="label" translatable="yes">Wineserver</property>
+                            <property name="single_line_mode">True</property>
+                            <attributes>
+                              <attribute name="weight" value="bold"/>
+                            </attributes>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="label13">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <property name="halign">end</property>
+                            <property name="xalign">1</property>
+                            <property name="yalign">0</property>
+                            <property name="xpad">5</property>
+                            <property name="label" translatable="yes">&lt;small&gt;Wine kernel daemon&lt;/small&gt;</property>
+                            <property name="use_markup">True</property>
+                            <property name="justify">right</property>
+                            <property name="wrap">True</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="left_attach">0</property>
+                        <property name="top_attach">5</property>
+                        <property name="width">1</property>
+                        <property name="height">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <placeholder/>
+                    </child>
+                    <child>
+                      <placeholder/>
                     </child>
                   </object>
                 </child>
@@ -668,20 +744,25 @@
                             <child>
                               <object class="GtkIconView" id="iconview1">
                                 <property name="visible">True</property>
-                                <property name="can_focus">False</property>
+                                <property name="can_focus">True</property>
                                 <property name="model">iconstore1</property>
                                 <property name="item_padding">0</property>
                                 <signal name="draw" handler="handle_iconview_draw" after="yes" swapped="no"/>
                                 <signal name="selection-changed" handler="handle_iconview_selection_changed" after="yes" swapped="no"/>
                                 <signal name="item-activated" handler="handle_iconview_item_activated" swapped="no"/>
                                 <child>
-                                  <object class="GtkCellRendererPixbuf" id="cellrendererpixbuf1"/>
+                                  <object class="GtkCellRendererPixbuf" id="cellrendererpixbuf1">
+                                    <property name="xpad">2</property>
+                                    <property name="ypad">2</property>
+                                    <property name="yalign">1</property>
+                                  </object>
                                   <attributes>
                                     <attribute name="pixbuf">0</attribute>
                                   </attributes>
                                 </child>
                                 <child>
                                   <object class="GtkCellRendererText" id="cellrenderertext1">
+                                    <property name="yalign">0</property>
                                     <property name="alignment">center</property>
                                     <property name="wrap_mode">word</property>
                                   </object>
@@ -721,10 +802,12 @@
                                 <child>
                                   <object class="GtkButton" id="button6">
                                     <property name="label">gtk-add</property>
+                                    <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
                                     <property name="relief">none</property>
                                     <property name="use_stock">True</property>
+                                    <signal name="clicked" handler="handle_add_known_executable" swapped="no"/>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -742,20 +825,26 @@
                             <child>
                               <object class="GtkIconView" id="iconview2">
                                 <property name="visible">True</property>
-                                <property name="can_focus">False</property>
+                                <property name="can_focus">True</property>
                                 <property name="model">iconstore2</property>
                                 <property name="item_padding">0</property>
                                 <signal name="draw" handler="handle_iconview_draw" after="yes" swapped="no"/>
                                 <signal name="selection-changed" handler="handle_iconview_selection_changed" after="yes" swapped="no"/>
+                                <signal name="key-press-event" handler="handle_iconview_keypress" swapped="no"/>
                                 <signal name="item-activated" handler="handle_iconview_item_activated" swapped="no"/>
                                 <child>
-                                  <object class="GtkCellRendererPixbuf" id="cellrendererpixbuf2"/>
+                                  <object class="GtkCellRendererPixbuf" id="cellrendererpixbuf2">
+                                    <property name="xpad">2</property>
+                                    <property name="ypad">2</property>
+                                    <property name="yalign">1</property>
+                                  </object>
                                   <attributes>
                                     <attribute name="pixbuf">0</attribute>
                                   </attributes>
                                 </child>
                                 <child>
                                   <object class="GtkCellRendererText" id="cellrenderertext6">
+                                    <property name="yalign">0</property>
                                     <property name="alignment">center</property>
                                     <property name="wrap_mode">word</property>
                                   </object>
@@ -903,6 +992,7 @@
                   <object class="GtkEntry" id="entry2">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
+                    <property name="has_focus">True</property>
                     <property name="invisible_char">•</property>
                   </object>
                   <packing>
@@ -950,6 +1040,135 @@
       <action-widget response="0">button11</action-widget>
       <action-widget response="1">button8</action-widget>
       <action-widget response="1">button10</action-widget>
+    </action-widgets>
+  </object>
+  <object class="GtkDialog" id="dialog_remember">
+    <property name="can_focus">False</property>
+    <property name="border_width">5</property>
+    <property name="type_hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox" id="dialog-vbox4">
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox" id="dialog-action_area4">
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="button13">
+                <property name="label">gtk-no</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="button12">
+                <property name="label">gtk-yes</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="pack_type">end</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox" id="box14">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="spacing">10</property>
+            <child>
+              <object class="GtkImage" id="image3">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="xalign">0</property>
+                <property name="yalign">0</property>
+                <property name="stock">gtk-dialog-question</property>
+                <property name="icon-size">6</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkBox" id="box15">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkLabel" id="label14">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="margin_top">4</property>
+                    <property name="margin_bottom">4</property>
+                    <property name="xalign">0</property>
+                    <property name="label" translatable="yes">Application inside unknown prefix</property>
+                    <attributes>
+                      <attribute name="weight" value="bold"/>
+                      <attribute name="scale" value="1.25"/>
+                    </attributes>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="label15">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="margin_bottom">2</property>
+                    <property name="xalign">0</property>
+                    <property name="label" translatable="yes">Should pywinery register it?</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="pack_type">end</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="0">button13</action-widget>
+      <action-widget response="1">button12</action-widget>
     </action-widgets>
   </object>
   <object class="GtkListStore" id="iconstore1">
