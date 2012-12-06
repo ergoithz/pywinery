@@ -107,7 +107,7 @@ def wineVersion():
     except subprocess.CalledProcessError:  # Non-zero rcode
         return None
 
-def legacy_to_bottlespec():
+def legacy_to_bottlespec(defaults):
     '''
     Moves old legacy configuration to new bottlespec format
     '''
@@ -765,7 +765,7 @@ class Prefix(object):
             os.makedirs(newdir)
 
         # TODO(spayder26): remove some day in the future
-        legacy_to_bottlespec()
+        legacy_to_bottlespec(defaults)
 
         # TODO(spayder26): better ignore behavior
         # Bottlespec based prefixes
