@@ -14,6 +14,10 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
+# TODO(spayder26): duplicate prefix
+# TODO(spayder26): remove confirmation dialog?
+# TODO(spayder26): locales
+#
 __app__ = "pywinery"
 __version__ = (0, 3, 0)
 __author__ = "Felipe A. Hernandez <spayder26@gmail.com>"
@@ -26,7 +30,6 @@ import os
 import os.path
 import subprocess
 import logging
-import locale
 import struct
 import functools
 import operator
@@ -35,18 +38,19 @@ import time
 from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf
 
 # App config
-app_path = os.path.dirname(os.path.abspath(__file__))
+# app_path = os.path.dirname(os.path.abspath(__file__))
 #sys.path.insert(0, app_path)
 
 PREFIX_PATH = "$HOME/.local/share/wineprefixes" # prefix path by bottlespec
 
-# Locale setup
-locale_path = os.path.join(app_path, "locale")
-locale_domain = __app__
-locale.setlocale(locale.LC_ALL, "")
-locale.bindtextdomain(locale_domain, locale_path)
-locale.textdomain(locale_domain)
-_ = locale.gettext
+## Locale setup
+#import locale
+#locale_path = os.path.join(app_path, "locale")
+#locale_domain = __app__
+#locale.setlocale(locale.LC_ALL, "")
+#locale.bindtextdomain(locale_domain, locale_path)
+#locale.textdomain(locale_domain)
+#_ = locale.gettext
 
 # Trash pipe for subproccess functions
 DEVNULL = open(os.devnull, "a")
@@ -57,6 +61,9 @@ CENV["LANG"] = "c"
 
 # ELF header struct
 ELF = struct.Struct("=4sBBBBBxxxxxxx")
+
+def _(txt):
+    return txt
 
 def elfarch(path):
     elfclass = 0
