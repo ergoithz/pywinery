@@ -1060,8 +1060,6 @@ class Main(Gtk.Application):
         '''
         dialog2 = self["dialog_new"]
         dialog2.set_transient_for(self["dialog_main"] if transient is None else transient)
-        self["button10"].set_property("visible", True) # add button
-        self["button8"].set_property("visible", False) # ok button
         self["combobox2"].set_property("visible", not arch is None) # arch combo
         archmodel = self["combobox2"].get_model()
         if arch:
@@ -1127,10 +1125,10 @@ class Main(Gtk.Application):
                 prefix = self.prefixes_by_path.pop(model[path][0])
                 self.prefixes.remove(prefix)
                 move_to_trash(prefix.path)
-                blacklist.append(model[path].iter)
+                blacklist.append(prefix.path)
             # Other row selection
             for row in model:
-                if row[0] and not row.iter in blacklist:
+                if row[0] and not row[0] in blacklist:
                     self.current_prefix = self.prefixes_by_path[row[0]]
                     break
             else:
@@ -1242,6 +1240,12 @@ class Main(Gtk.Application):
             self["notebook1"].set_property("sensitive", False)
             self._treeview_last_index = -1
             self._treeview_last = None
+            # Prefix property handling for main dialog
+            if self["dialog_config"].get_property("visible"):
+                self["entry1"].set_text("")
+                self["label8"].set_label(_("unknown"))
+                self["checkbutton2"].set_property("active", False)
+                self.action_gui_executables()
         elif prefix == self.current_prefix and self.gui:
             self["notebook1"].set_property("sensitive", True)
             prefixpos = -1
@@ -1429,7 +1433,8 @@ class Main(Gtk.Application):
 
         if self.flag_unknown_prefix:
             response = self["dialog_remember"].run()
-            if response == 1:
+            self["dialog_remember"].set_property("visible", False)
+            if response == Gtk.ResponseType.OK:
                 # Register prefix
                 prefix = self.current_prefix
                 prefix.save()
@@ -1458,8 +1463,9 @@ class Main(Gtk.Application):
         self.action_prefix_changed()
 
     def handle_entry_name_change(self, widget):
-        name = widget.get_text()
-        self.current_prefix.name = name
+        if self.current_prefix:
+            name = widget.get_text()
+            self.current_prefix.name = name
 
     def handle_button_show_config(self, widget):
         self["dialog_config"].show()
@@ -1502,49 +1508,53 @@ class Main(Gtk.Application):
         Updates de executable model based on available wine tools and known
         prefix executables.
         '''
-        icon_size = 32
-        theme = Gtk.IconTheme.get_default()
+        if self.current_prefix:
+            icon_size = 32
+            theme = Gtk.IconTheme.get_default()
 
+            # Glade bug workaround
+            self["cellrenderertext1"].set_property("xalign", 0.5)
+            self["cellrenderertext6"].set_property("xalign", 0.5)
 
-        # Glade bug workaround
-        self["cellrenderertext1"].set_property("xalign", 0.5)
-        self["cellrenderertext6"].set_property("xalign", 0.5)
+            missing_icon = theme.load_icon("gtk-missing-image", icon_size, 0)
+            error_icon = theme.load_icon("gtk-missing-image", icon_size, 0)
 
-        missing_icon = theme.load_icon("gtk-missing-image", icon_size, 0)
-        error_icon = theme.load_icon("gtk-missing-image", icon_size, 0)
+            exec_variables = {
+                "prefix": self.current_prefix.path,
+                "winepath": self.current_winepath
+                }
 
-        exec_variables = {
-            "prefix": self.current_prefix.path,
-            "winepath": self.current_winepath
-            }
+            model = self["iconstore1"]
+            model.clear()
+            for text, (icon_names, requirements, command) in WINE_TOOLS.iteritems():
+                available = all(checkBin(i % exec_variables) for i in requirements)
+                icon = missing_icon
+                if available:
+                    for icon_name in icon_names:
+                        try:
+                            if theme.has_icon(icon_name):
+                                icon = theme.load_icon(icon_name, icon_size, 0)
+                                break
+                        except BaseException as e:
+                            # Bug in GTK
+                            logging.exception(e)
+                model.append((icon, text, available, text))
 
-        model = self["iconstore1"]
-        model.clear()
-        for text, (icon_names, requirements, command) in WINE_TOOLS.iteritems():
-            available = all(checkBin(i % exec_variables) for i in requirements)
-            icon = missing_icon
-            if available:
-                for icon_name in icon_names:
-                    try:
-                        if theme.has_icon(icon_name):
-                            icon = theme.load_icon(icon_name, icon_size, 0)
-                            break
-                    except BaseException as e:
-                        # Bug in GTK
-                        logging.exception(e)
-            model.append((icon, text, available, text))
+            known_executables = self.current_prefix.known_executables
 
-        known_executables = self.current_prefix.known_executables
+            model = self["iconstore2"]
+            model.clear()
+            for path in known_executables:
+                icon = missing_icon
+                available = os.path.exists(path)
+                icon = self.icon_extractor.get_from_cache(path, icon_size)
+                model.append((icon, os.path.basename(path), available, path))
+            show_executables = bool(known_executables)
+        else:
+            self["iconstore1"].clear()
+            self["iconstore2"].clear()
+            show_executables = False
 
-        model = self["iconstore2"]
-        model.clear()
-        for path in known_executables:
-            icon = missing_icon
-            available = os.path.exists(path)
-            icon = self.icon_extractor.get_from_cache(path, icon_size)
-            model.append((icon, os.path.basename(path), available, path))
-
-        show_executables = bool(known_executables)
         if show_executables:
             GLib.idle_add(self.action_set_exe_icons, icon_size)
             self._update_iconviews = True

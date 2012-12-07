@@ -1,8 +1,18 @@
+pywinery (0.3) testing; urgency=medium
+
+  * Ported to Gtk3
+  * Wine bug workarounds implemented.
+  * Brief code rewrite.
+  * New UI design for better usability.
+  * Changelog dates fixed.
+
+ -- Felipe A. Hernandez <spayder26@gmail.com> Fri, 7 Dec 2012 17:29:00 +0100
+
 pywinery (0.2-1) testing; urgency=high
 
   * Fixed issue#10.
-  
- -- Felipe A. Hernandez <spayder26@gmail.com>  Wed, 7 Sep 2010 17:04:00 +0000
+
+ -- Felipe A. Hernandez <spayder26@gmail.com>  Wed, 14 Sep 2011 17:04:00 +0000
 
 pywinery (0.2-0) testing; urgency=low
 
@@ -14,8 +24,8 @@ pywinery (0.2-0) testing; urgency=low
   * Wine BottleSpec compliant.
   * Huge code refactor for maintainability.
   * Improved icon.
-  
- -- Felipe A. Hernandez <spayder26@gmail.com>  Wed, 7 Sep 2010 17:04:00 +0000
+
+ -- Felipe A. Hernandez <spayder26@gmail.com>  Wed, 7 Sep 2011 17:04:00 +0000
 
 pywinery (0.1-12) testing; urgency=medium
 
