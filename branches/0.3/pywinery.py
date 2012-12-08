@@ -816,7 +816,7 @@ class Prefix(object):
             # Some files added on the same second, we have to choose the best
             else:
                 # Choose result based on name ordering and time decimals:
-                #  - Name conflicts are usually resolved incrementally
+                #  - Name conflicts are usually resolved incrementally.
                 #  - We assume each file has been added on a different fraction
                 #    of best second. It's a bit risky, but it's better than a
                 #    random selection.
@@ -1561,15 +1561,19 @@ class Main(Gtk.Application):
         if self.flag_config_mode:
             if self.prefixes:
                 self["treeview1"].set_cursor((0,))
-            self["dialog_config"].set_property("skip-taskbar-hint", False)
             self.add_window(self["dialog_config"])
-            self["dialog_config"].set_property("visible", True)
+            self["scrolledwindow2"].set_property("visible", True)
+            self["dialog_config"].set_property("skip-taskbar-hint", False)
+            self["dialog_config"].set_property("type-hint", Gdk.WindowTypeHint.NORMAL)
             self["dialog_config"].set_icon_name("pywinery")
+            self["dialog_config"].set_property("visible", True)
         else:
-            self["scrolledwindow2"].set_property("visible", False)
             self.add_window(self["dialog_main"])
-            self["dialog_main"].set_property("visible", True)
+            self["scrolledwindow2"].set_property("visible", False)
+            self["dialog_config"].set_property("skip-taskbar-hint", True)
+            self["dialog_config"].set_property("type-hint", Gdk.WindowTypeHint.DIALOG)
             self["dialog_config"].set_icon_name("gtk-preferences")
+            self["dialog_main"].set_property("visible", True)
 
         # Selecting current prefix
         self.action_prefix_changed()
