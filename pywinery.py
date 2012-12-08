@@ -15,9 +15,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 # TODO(spayder26): duplicate prefix
-# TODO(spayder26): remove confirmation dialog?
 # TODO(spayder26): locales
-#
 __app__ = "pywinery"
 __version__ = (0, 3, 0)
 __author__ = "Felipe A. Hernandez <spayder26@gmail.com>"
@@ -34,6 +32,9 @@ import struct
 import functools
 import operator
 import time
+import locale
+import datetime
+import urllib2
 
 from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf
 
@@ -44,7 +45,6 @@ from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf
 PREFIX_PATH = "$HOME/.local/share/wineprefixes" # prefix path by bottlespec
 
 ## Locale setup
-#import locale
 #locale_path = os.path.join(app_path, "locale")
 #locale_domain = __app__
 #locale.setlocale(locale.LC_ALL, "")
@@ -86,9 +86,6 @@ def alternative_if_exists(path):
         counter += 1
         temptative = "%s_%d" % (path, counter)
     return temptative
-
-def move_to_trash(path):
-    Gio.File.new_for_path(path).trash(None)
 
 # Enviroment's detection and actions
 def getBin(name):
@@ -158,6 +155,27 @@ def legacy_to_bottlespec(defaults):
                 prefix.known_executables.extend(values)
                 prefix.save()
         os.remove(old)
+
+def newline(fileobj):
+    '''
+    Detects the line separator from fileobj
+    '''
+    newlinechar = None
+    if hasattr(fileobj, "newlines"):
+        if isinstance(fileobj.newlines, tuple):
+            newlinechar = fileobj.newlines[-1]
+        else:
+            newlinechar = fileobj.newlines
+    if newlinechar is None:
+        return os.linesep
+    return newlinechar
+
+def str_to_time(text, fmt="%Y-%m-%dT%H:%M:%S"):
+    '''
+    Translates from time string to timestamp
+    '''
+    return time.mktime(datetime.datetime.strptime(text, fmt).timetuple())
+
 
 class CallbackList(list):
     __modifiers__ = {
@@ -343,20 +361,6 @@ class ResolutionFixer(object):
                     )
             except BaseException as e:
                 logging.exception(e)
-
-def newline(fileobj):
-    '''
-    Detects the line separator from fileobj
-    '''
-    newlinechar = None
-    if hasattr(fileobj, "newlines"):
-        if isinstance(fileobj.newlines, tuple):
-            newlinechar = fileobj.newlines[-1]
-        else:
-            newlinechar = fileobj.newlines
-    if newlinechar is None:
-        return os.linesep
-    return newlinechar
 
 class Prefix(object):
     '''
@@ -749,20 +753,84 @@ class Prefix(object):
             else:
                 GLib.timeout_add(200, deferred_action)
 
-    def remove(self):
+    _trash_time = sys.maxint
+    def send_to_trash(self):
         '''
-        prefix_path = os.path.expandvars(PREFIX_PATH)
-        if self._path.startswith(prefix_path):
-            if os.path.islink(self._path):
-                rm(self.path)
-            else:
-                self.ignore = True
+        Sends prefix to trash.
+        '''
+        try:
+            f = Gio.File.new_for_path(self.path)
+            self._trash_time = time.time()
+            f.trash(None)
+        except GLib.GError:
+            logging.error("Cannot send prefix %s to trash." % self.path)
 
-        me = abspath(self.path)
-        for prefix in listdir(prefix_path):
-            if me == abspath(prefix_path, ):
+    _trash_children_args = (
+        ",".join((
+            Gio.FILE_ATTRIBUTE_STANDARD_NAME,
+            Gio.FILE_ATTRIBUTE_TRASH_ORIG_PATH,
+            Gio.FILE_ATTRIBUTE_TRASH_DELETION_DATE)),
+        Gio.FileQueryInfoFlags.NONE, None)
+    _trash_mvargs = (Gio.FileCopyFlags.ALL_METADATA, None, None, None)
+    def restore_from_trash(self, retries=10, timeout=2):
         '''
-        pass
+        Gio has no way to recover files from trash. That means we have to
+        look for best matching file.
+
+        As Gio operations are asynchronous, it's a good idea have some retries.
+
+        Args:
+            retries: int, number of retries, defaults to 10
+            timeout: float, seconds between retries, defaults to 2
+        '''
+        # Match last trash file for this
+        trashfile = Gio.File.new_for_uri("trash://")
+        trashtime = int(self._trash_time) # Gio max precision is seconds
+        tname, tpath, tdate = self._trash_children_args[0].split(",")
+        ppath = self.path
+
+        matches = []
+        timedist = sys.maxint
+        # Iterate over trash files
+        for info in trashfile.enumerate_children(*self._trash_children_args):
+            dpath = info.get_attribute_as_string(tpath)
+            # Select those whose path is prefix path
+            if dpath == ppath:
+                dname = info.get_attribute_as_string(tname)
+                ddate = info.get_attribute_as_string(tdate)
+                ddist = str_to_time(ddate, "%Y-%m-%dT%H:%M:%S") - trashtime
+                # Deletion time must be later than send to trash
+                if ddist >= 0:
+                    if ddist < timedist:
+                        # File has been removed closer to deletion time
+                        timedist = ddist
+                        matches[:] = (dname,)
+                    elif ddist == timedist:
+                        # Due Gio deletion date precision, two prefixes removed
+                        # on a second could be a problem.
+                        matches.append(dname)
+        if matches:
+            # Best common case: one single match
+            if len(matches) == 1:
+                match = matches[0]
+            # Some files added on the same second, we have to choose the best
+            else:
+                # Choose result based on name ordering and time decimals:
+                #  - Name conflicts are usually resolved incrementally
+                #  - We assume each file has been added on a different fraction
+                #    of best second. It's a bit risky, but it's better than a
+                #    random selection.
+                decpos = int(len(matches)*(self._trash_time - trashtime))
+                matches.sort()
+                match = matches[decpos]
+            # Move from trash to original location
+            trashfile = Gio.File.new_for_uri("trash:///%s" % urllib2.quote(match))
+            destfile = Gio.File.new_for_uri("file://%s" %  urllib2.quote(ppath))
+            trashfile.move(destfile, *self._trash_mvargs)
+        elif retries > 0:
+            # Retry
+            time.sleep(timeout)
+            self.restore_from_trash(retries=retries-1, timeout=timeout)
 
     @classmethod
     def iter_all(self, defaults, cb=None):
@@ -851,6 +919,16 @@ class Main(Gtk.Application):
             return self.current_prefix.winepath
         return self.default_winepath
 
+    _trash_prefix = None
+    @property
+    def trash_prefix(self):
+        return self._trash_prefix
+
+    @trash_prefix.setter
+    def trash_prefix(self, v):
+        self._trash_prefix = v
+        self["infobar1"].set_property("visible", bool(v))
+
     LIST_PREFIX = 0
     LIST_PREFIX_BROKEN = 1
     LIST_SEPARATOR = 4
@@ -863,6 +941,10 @@ class Main(Gtk.Application):
         '''
         return self.gui.get_object(x)
 
+    def action_load_prefixes(self):
+        self.prefixes = list(Prefix.iter_all(self.default_prefix_config))
+        self.prefixes_by_path = dict((i.path, i) for i in self.prefixes)
+
     def __init__(self, args=None):
         Gtk.Application.__init__(self, application_id="apps.s26.pywinery")
         self.connect("activate", self.handle_activate)
@@ -870,8 +952,18 @@ class Main(Gtk.Application):
         if args == None:
             args = [__file__]
 
+        '''
+        monitor = Gio.File.new_for_path(
+            os.path.expandvars(PREFIX_PATH)
+            ).monitor_directory(
+                Gio.FileMonitorFlags.SEND_MOVED
+                None,
+                None)
+        monitor.connect("changed", )
+        '''
+
         guifile = "/usr/share/pywinery/gui.glade"
-        localgui = os.path.join(os.path.dirname(args[0]),"gui.glade")
+        localgui = os.path.join(os.path.dirname(args[0]), "gui.glade")
         if os.path.isfile(localgui):
             guifile = localgui
 
@@ -893,8 +985,8 @@ class Main(Gtk.Application):
             "ww_ignore" : None,
             "ww_arch": "win32"
             }
-        self.prefixes = list(Prefix.iter_all(self.default_prefix_config))
-        self.prefixes_by_path = dict((i.path, i) for i in self.prefixes)
+
+        self.action_load_prefixes()
 
         self.default_environment = environ.copy()
         self.default_arch = None
@@ -1127,15 +1219,16 @@ class Main(Gtk.Application):
             selection = widget.get_selection()
             # Prefix removal
             model, paths = selection.get_selected_rows()
-            blacklist = []
-            for path in paths:
-                prefix = self.prefixes_by_path.pop(model[path][0])
-                self.prefixes.remove(prefix)
-                move_to_trash(prefix.path)
-                blacklist.append(prefix.path)
+            path = paths[0] # Treeview selection mode is single
+            row = model[path]
+            prefix = self.prefixes_by_path.pop(row[0])
+            self.prefixes.remove(prefix)
+            prefix.send_to_trash()
+            self.trash_prefix = prefix
+            model.remove(row.iter)
             # Other row selection
             for row in model:
-                if row[0] and not row[0] in blacklist:
+                if row[0]:
                     self.current_prefix = self.prefixes_by_path[row[0]]
                     break
             else:
@@ -1396,6 +1489,13 @@ class Main(Gtk.Application):
         if self.flag_config_mode:
             self.quit()
 
+    def handle_infobar_response(self, widget, response):
+        if response == 1 and self.trash_prefix:
+            self.trash_prefix.restore_from_trash()
+            self.action_load_prefixes()
+            self.guiPrefix()
+        self.trash_prefix = None
+
     def _app_quit(self):
         for prefix in self.prefixes:
             if prefix.running_commands > 0:
@@ -1418,7 +1518,7 @@ class Main(Gtk.Application):
     def guiStart(self):
 
         self.gui = Gtk.Builder()
-        self.gui.set_translation_domain(locale_domain)
+        #self.gui.set_translation_domain(locale_domain)
         self.gui.add_from_file(self.gui_file)
         self.gui.connect_signals(self)
 
@@ -1450,6 +1550,11 @@ class Main(Gtk.Application):
             else:
                 # Forget current prefix
                 self.current_prefix = None
+
+        # Glade bug workarounds
+        self["cellrenderertext1"].set_property("xalign", 0.5)
+        self["cellrenderertext6"].set_property("xalign", 0.5)
+        self["infobar_action_area1"].set_property("orientation", Gtk.Orientation.HORIZONTAL)
 
         self.guiPrefix()
 
@@ -1518,10 +1623,6 @@ class Main(Gtk.Application):
         if self.current_prefix:
             icon_size = 32
             theme = Gtk.IconTheme.get_default()
-
-            # Glade bug workaround
-            self["cellrenderertext1"].set_property("xalign", 0.5)
-            self["cellrenderertext6"].set_property("xalign", 0.5)
 
             missing_icon = theme.load_icon("gtk-missing-image", icon_size, 0)
             error_icon = theme.load_icon("gtk-missing-image", icon_size, 0)
