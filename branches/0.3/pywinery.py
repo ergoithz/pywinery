@@ -78,6 +78,21 @@ def elfarch(path):
             f.close()
     return 64 if elfclass else 32
 
+def is_path_prefix(path):
+    if (
+      os.path.isdir(path) and
+      os.path.isfile(os.path.join(path, "system.reg")) and
+      os.path.isdir(os.path.join(path, "drive_c")) and
+      os.path.isdir(os.path.join(path, "dosdevices"))
+      ):
+        return True
+    elif os.path.isfile(os.path.join(path, "wrapper.cfg")):
+        f = open("wrapper.cfg")
+        data = f.read()
+        f.close()
+        return "ww_name=" in data
+    return False
+
 def alternative_if_exists(path):
     ''' Receives a path and returns an alternative if alredy exists '''
     temptative = path = os.path.expandvars(path)
@@ -498,10 +513,6 @@ class Prefix(object):
         '''
         return os.path.isdir(self._path)
 
-    @property
-    def running_commands(self):
-        return self._runningcount
-
     callback = None
     def __init__(self, path, defaults):
         if not os.path.isabs(path):
@@ -632,25 +643,6 @@ class Prefix(object):
     def _update_known_executables(self, exelist):
         self["ww_known_executables"] = ":".join(i.replace(":","\\:") for i in exelist)
 
-    _runningcount = 0
-    _resolution_fixer = None
-    def _fixes_initialize(self, command):
-        if self._resolution_fixer is None:
-            self._resolution_fixer = ResolutionFixer()
-        self._resolution_fixer.backup()
-        self._runningcount += 1
-
-    def _fixes_watch(self, popen):
-        rcode = popen.poll()
-        if rcode is None:
-            pass
-        else:
-            self._resolution_fixer.restore()
-            self._resolution_fixer.clear()
-            self._runningcount -= 1
-            return False
-        return True
-
     def relativize(self, path):
         path = os.path.abspath(path)
         home = environ["HOME"]
@@ -667,9 +659,7 @@ class Prefix(object):
 
     def wine(self, command, env=None, debug=False):
         winepath = self["ww_wine"] or self["default_winepath"]
-        self._fixes_initialize(command)
         popen = self.run((winepath,)+command, env, debug)
-        GLib.timeout_add(500, functools.partial(self._fixes_watch, popen))
         return popen
 
     def run(self, command, env=None, debug=False):
@@ -855,7 +845,7 @@ class Prefix(object):
                 yield prefix
             # Broken prefix if doesn't and is link,
             elif os.path.islink(apath):
-                yield BrokenPrefix(apath, defaults, cb)
+                yield BrokenPrefix(apath, defaults)
 
 
 class BrokenPrefix(Prefix):
@@ -868,11 +858,11 @@ class BrokenPrefix(Prefix):
 
 WINE_TOOLS = {
     "winetricks": (
-        ("wine-winetricks", "winetricks", "wine"),
+        ("wine-winetricks", "winetricks", "text-x-script"),
         ("winetricks",),
         ("winetricks",)),
     "winecfg":(
-        ("wine-winecfg", "winecfg", "wine-cfg", "wine"),
+        ("wine-winecfg", "winecfg", "wine-cfg", "wine", "application-x-ms-dos-executable","application-x-executable"),
         ("%(winepath)s",),
         ("%(winepath)s", "winecfg",)),
     "cmd":(
@@ -882,22 +872,60 @@ WINE_TOOLS = {
         ("%(winepath)s",),
         ("%(winepath)s", "wineconsole", "cmd")),
     "uninstaller":(
-        ("wine-uninstaller", "wine"),
+        ("wine-uninstaller", "wine", "application-x-ms-dos-executable", "application-x-executable"),
         ("%(winepath)s",),
         ("%(winepath)s", "uninstaller")),
     "explorer":(
-        ("wine-explorer", "wine",),
+        ("wine-explorer", "wine", "application-x-ms-dos-executable", "application-x-executable"),
         ("%(winepath)s",),
         ("%(winepath)s", "explorer")),
     "regedit":(
-        ("wine-regedit", "wine"),
+        ("wine-regedit", "wine", "application-x-ms-dos-executable", "application-x-executable"),
         ("%(winepath)s",),
         ("%(winepath)s", "regedit")),
     "browse folder":(
-        ("gtk-directory",),
+        ("folder-wine", "gtk-directory",),
         ("xdg-open",),
         ("xdg-open", "%(prefix)s")),
     }
+
+class Tray(Gtk.Application):
+    def __init__(self):
+        Gtk.Application.__init__(
+            self,
+            # Must be kwargs, but it's not documented anywhere
+            application_id="apps.s26.pywinery.tray",
+            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE
+            )
+    _runningcount = 0
+    _resolution_fixer = None
+    def _fixes_initialize(self, command):
+        if self._resolution_fixer is None:
+            self._resolution_fixer = ResolutionFixer()
+        self._resolution_fixer.backup()
+        self._runningcount += 1
+
+    def _fixes_watch(self, popen):
+        rcode = popen.poll()
+        if rcode is None:
+            pass
+        else:
+            self._resolution_fixer.restore()
+            self._resolution_fixer.clear()
+            self._runningcount -= 1
+            return False
+        return True
+    #GLib.timeout_add(500, functools.partial(self._fixes_watch, popen))
+
+def pixbuf_opacity(pixbuf, opacity=1):
+    opacity = int(255*opacity)
+    width = pixbuf.get_width()
+    height = pixbuf.get_height()
+    bps = pixbuf.get_bits_per_sample()
+    r = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, bps, width, height)
+    r.fill(0)
+    pixbuf.composite(r, 0, 0, width, height, 0, 0, 1, 1, GdkPixbuf.InterpType.NEAREST, opacity)
+    return r
 
 class Main(Gtk.Application):
     _current_prefix = None
@@ -945,12 +973,14 @@ class Main(Gtk.Application):
         self.prefixes = list(Prefix.iter_all(self.default_prefix_config))
         self.prefixes_by_path = dict((i.path, i) for i in self.prefixes)
 
-    def __init__(self, args=None):
-        Gtk.Application.__init__(self, application_id="apps.s26.pywinery")
-        self.connect("activate", self.handle_activate)
-
-        if args == None:
-            args = [__file__]
+    def __init__(self):
+        Gtk.Application.__init__(
+            self,
+            # Must be kwargs, but it's not documented anywhere
+            application_id="apps.s26.pywinery",
+            flags=Gio.ApplicationFlags.NON_UNIQUE | Gio.ApplicationFlags.HANDLES_COMMAND_LINE
+            )
+        self.connect("command-line", self.handle_commandline)
 
         '''
         monitor = Gio.File.new_for_path(
@@ -963,7 +993,7 @@ class Main(Gtk.Application):
         '''
 
         guifile = "/usr/share/pywinery/gui.glade"
-        localgui = os.path.join(os.path.dirname(args[0]), "gui.glade")
+        localgui = os.path.join(os.path.dirname(__file__), "gui.glade")
         if os.path.isfile(localgui):
             guifile = localgui
 
@@ -1001,64 +1031,14 @@ class Main(Gtk.Application):
         self.flag_mode_nogui = False
 
         self.flag_remember = False
+        self.flag_mode_ask = False
         self.flag_unknown_prefix = False
         self.flag_config_mode = False
 
-        self.flag_treeview_click_time = 0
-
-        c = 1
-        for i in args[1:]:
-            if i[0] != "-": break # Given command could contains - and --
-            elif i == "-x" or i == "--nogui": self.flag_mode_nogui = True
-            elif i == "-d" or i == "--debug": self.flag_mode_debug = True
-            c += 1
+        self.skip_nowine_message = False
 
         if self.flag_mode_debug:
             logging.getLogger().setLevel(logging.DEBUG)
-
-        # Arg given after option params, assuming executable
-        if len(args) > c:
-            apath = args[c]
-            if "://" in apath[3:10]:
-                apath = GLib.filename_from_uri(apath, None)
-            apath = os.path.abspath(apath)
-            if os.path.isfile(apath): # Given arg is file, thus is exe or msi
-                if Gio.content_type_guess(apath, None)[0].lower() == "application/x-msi":
-                    self.given_msi = (apath,)+tuple(args[c+1:])
-                else:
-                    self.given_exe = (apath,)+tuple(args[c+1:])
-                    for i in self.prefixes:
-                        if apath in i.known_executables:
-                            self.current_prefix = i
-                            self.flag_remember = True
-                            break
-
-                if not self.current_prefix:
-                    # Known prefix search on directory hierarchy
-                    for i in self.prefixes:
-                        if apath.startswith(i.path) or (
-                          i.imported and
-                          os.path.abspath(apath).startswith(os.path.realpath(i.path))
-                          ):
-                            self.current_prefix = i
-                            break
-                    else:
-                        # New prefix search on directory hierarchy
-                        sp = apath.split(os.sep)[:-1]
-                        while len(sp) > 1:
-                            lookdir = os.sep.join(sp)
-                            lookdir_content = os.listdir(lookdir)
-                            if (
-                              "system.reg" in lookdir_content and
-                              "drive_c" in lookdir_content and
-                              "dosdevices" in lookdir_content):
-                                self.flag_unknown_prefix = True
-                                self.current_prefix = Prefix(lookdir, self.default_prefix_config)
-                                break
-                            sp.pop()
-            else:
-                self.given_cmd = tuple(args[c:])
-        self.flag_config_mode = not (self.given_msi or self.given_cmd or self.given_exe)
 
     def action_open_directory(self, directory):
         for i in ("xdg-open", "thunar", "pacman", "nautilus", "dolphin"):
@@ -1088,21 +1068,74 @@ class Main(Gtk.Application):
                 known.remove(rpath)
         self.current_prefix.wine(command, env=self.default_environment, debug=self.flag_mode_debug)
 
-    def run(self):
-        Gtk.Application.run(self, None)
-
     def aux_separator_func(self, model, row, data=None):
         return model.get_value(row, 4) == self.LIST_SEPARATOR
 
-    def handle_activate(self, widget):
-        '''
-        Called once application is activated (Gtk3 way)
-        '''
-        if self.flag_mode_nogui:
+    def action_prefix_for_path(self, apath):
+        # Known prefix search on directory hierarchy
+        auxpath = "%s%s" % (apath, os.sep)
+        for i in self.prefixes:
+            if auxpath.startswith("%s%s" % (i.path, os.sep)):
+                return i, False
+            elif i.imported and auxpath.startswith("%s%s" % (os.path.realpath(i.path), os.sep)):
+                return i, False
+        else:
+            # New prefix search on directory hierarchy
+            lookdir = os.path.dirname(apath)
+            while lookdir != os.path.dirname(lookdir): # Root test
+                if is_path_prefix(lookdir):
+                    return Prefix(lookdir, self.default_prefix_config), True
+                lookdir = os.path.dirname(lookdir)
+        return None, False
+
+    def handle_commandline(self, main, commandline, data=None):
+        args = commandline.get_arguments()
+        c = 1
+        for i in args[1:]:
+            if i[0] != "-": break # Given command could contains - and --
+            elif i == "-x" or i == "--nogui": self.flag_mode_nogui = True
+            elif i == "-d" or i == "--debug": self.flag_mode_debug = True
+            elif i == "-f" or i == "--force-ask": self.flag_mode_ask = True
+            c += 1
+
+        if len(args) > c:
+            # Arg given after option params, assuming command
+            apath = " ".join(args[c:])
+            if "://" in apath[3:10]:
+                apath = GLib.filename_from_uri(apath, None)
+            apath = os.path.abspath(apath)
+
+            if os.path.isfile(apath):
+                # Given param is path
+                if Gio.content_type_guess(apath, None)[0].lower() == "application/x-msi":
+                    self.given_msi = (apath,)+tuple(args[c+1:])
+                else:
+                    self.given_exe = (apath,)+tuple(args[c+1:])
+
+                # Known prefix search by file in known executables
+                for i in self.prefixes:
+                    if apath in i.known_executables:
+                        self.current_prefix = i
+                        self.flag_remember = True
+                        break
+                else:
+                    self.current_prefix, self.flag_unknown_prefix = self.action_prefix_for_path(apath)
+            else:
+                # Assuming given param is command
+                self.given_cmd = tuple(args[c:])
+
+        if self.current_prefix is None:
+            # New prefix search on pwd hierarchy
+            apath = os.path.abspath(os.getcwd())
+            self.current_prefix, self.flag_unknown_prefix = self.action_prefix_for_path(apath)
+
+        self.flag_config_mode = not (self.given_msi or self.given_cmd or self.given_exe)
+
+        if self.flag_mode_nogui or (self.flag_remember and not self.flag_mode_ask):
             if self.given_msi or self.given_exe or self.given_cmd:
                 if self.current_prefix:
                     if self.flag_unknown_prefix:
-                        stderr.write("Autodetected unknown prefix.%s" % linesep)
+                        sys.stderr.write("Autodetected unknown prefix.%s" % linesep)
                     self.action_launch()
                 else:
                     sys.stderr.write("Pywinery is unable to find a suitable prefix.%s" % linesep)
@@ -1111,6 +1144,7 @@ class Main(Gtk.Application):
             sys.exit(1)
         else:
             self.guiStart()
+        return 0
 
     # TODO
     def handler_error(self, code=None, message=None):
@@ -1125,22 +1159,23 @@ class Main(Gtk.Application):
         self.quit()
 
     def handle_iconview_item_activated(self, widget, path):
-        iiiid = widget.get_model()[path][3] # internal iconview item id
-
-        if widget == self["iconview1"]:
-            exec_variables = {
-                "prefix": self.current_prefix.path,
-                "winepath": self.current_winepath
-                }
-            self.current_prefix.run(
-                [i % exec_variables for i in WINE_TOOLS[iiiid][2]],
-                env=self.default_environment, debug=self.flag_mode_debug
-                )
-        else:
-            self.current_prefix.wine(
-                (iiiid,), # internal id for iconview2 is executable path
-                env=self.default_environment, debug=self.flag_mode_debug
-                )
+        row = widget.get_model()[path]
+        if row[2]: # availability
+            iiiid = row[3] # internal iconview item id
+            if widget == self["iconview1"]:
+                exec_variables = {
+                    "prefix": self.current_prefix.path,
+                    "winepath": self.current_winepath
+                    }
+                self.current_prefix.run(
+                    [i % exec_variables for i in WINE_TOOLS[iiiid][2]],
+                    env=self.default_environment, debug=self.flag_mode_debug
+                    )
+            else:
+                self.current_prefix.wine(
+                    (iiiid,), # internal id for iconview2 is executable path
+                    env=self.default_environment, debug=self.flag_mode_debug
+                    )
 
     def aux_dialog_prefix_name(self, name="", arch=None, new=False, transient=None):
         '''
@@ -1393,13 +1428,19 @@ class Main(Gtk.Application):
                 # Prefix is active
                 self["button1"].set_property("sensitive", not prefix is None and prefix.ready)
 
+                haswine = False
+                if prefix.winepath:
+                    haswine = checkBin(prefix.winepath)
+                elif self.default_winepath:
+                    haswine = checkBin(self.default_winepath)
+
+                if not self.skip_nowine_message and not haswine:
+                    self["infobar2"].set_property("visible", True)
+
                 # Winepath check
                 runable = False
                 if prefix and prefix.ready:
-                    runable = (
-                        checkBin(prefix.winepath or self.default_winepath)
-                        and not isinstance(prefix, BrokenPrefix)
-                        )
+                    runable = haswine and not isinstance(prefix, BrokenPrefix)
                 self["button3"].set_property("sensitive", runable)
 
                 # Remember
@@ -1496,10 +1537,12 @@ class Main(Gtk.Application):
             self.guiPrefix()
         self.trash_prefix = None
 
+    def handle_infobar2_response(self, widget, response):
+        if response == 0:
+            self["infobar2"].set_property("visible", False)
+            self.skip_nowine_message = True
+
     def _app_quit(self):
-        for prefix in self.prefixes:
-            if prefix.running_commands > 0:
-                return True
         Gtk.Application.quit(self)
         return False
 
@@ -1516,7 +1559,6 @@ class Main(Gtk.Application):
         return True
 
     def guiStart(self):
-
         self.gui = Gtk.Builder()
         #self.gui.set_translation_domain(locale_domain)
         self.gui.add_from_file(self.gui_file)
@@ -1556,10 +1598,16 @@ class Main(Gtk.Application):
         self["cellrenderertext6"].set_property("xalign", 0.5)
         self["infobar_action_area1"].set_property("orientation", Gtk.Orientation.HORIZONTAL)
 
+        if self.given_exe:
+            GLib.idle_add(self.action_set_app_icons)
+            self["dialog_main"].set_title("pywinery - %s" % os.path.basename(self.given_exe[0]))
+
         self.guiPrefix()
 
         if self.flag_config_mode:
-            if self.prefixes:
+            if self.current_prefix:
+                self.action_prefix_changed()
+            elif self.prefixes:
                 self["treeview1"].set_cursor((0,))
             self.add_window(self["dialog_config"])
             self["scrolledwindow2"].set_property("visible", True)
@@ -1592,8 +1640,11 @@ class Main(Gtk.Application):
 
     def handle_iconview_selection_changed(self, widget):
         iconview = self["iconview2" if widget == self["iconview1"] else "iconview1"]
+        model = widget.get_model()
         if iconview.get_selected_items() and widget.get_selected_items():
             iconview.unselect_all()
+        if any(not model[p][2] for p in widget.get_selected_items()):
+            widget.unselect_all()
 
     _update_iconviews = False
     def handle_iconview_draw(self, widget, cairo_context):
@@ -1601,7 +1652,6 @@ class Main(Gtk.Application):
         Calculate and set the best item-width for both iconviews
         Should be called once iconview items were drawed.
         '''
-
         if self._update_iconviews:
             # Run only when requested and until all iconviews are drawed
             item_widths = [
@@ -1618,6 +1668,12 @@ class Main(Gtk.Application):
         model = self["iconstore2"]
         for path, row in zip(self.current_prefix.known_executables, model):
             row[0] = self.icon_extractor.extract(path, icon_size)
+
+    def action_set_app_icons(self):
+        if self.given_exe:
+            exeicon = self.icon_extractor.extract(self.given_exe[0], 48)
+            self["dialog_main"].set_icon(exeicon)
+            self["image14"].set_from_pixbuf(exeicon)
 
     def action_gui_executables(self):
         '''
@@ -1641,15 +1697,16 @@ class Main(Gtk.Application):
             for text, (icon_names, requirements, command) in WINE_TOOLS.iteritems():
                 available = all(checkBin(i % exec_variables) for i in requirements)
                 icon = missing_icon
-                if available:
-                    for icon_name in icon_names:
-                        try:
-                            if theme.has_icon(icon_name):
-                                icon = theme.load_icon(icon_name, icon_size, 0)
-                                break
-                        except BaseException as e:
-                            # Bug in GTK
-                            logging.exception(e)
+                for icon_name in icon_names:
+                    try:
+                        if theme.has_icon(icon_name):
+                            icon = theme.load_icon(icon_name, icon_size, 0)
+                            break
+                    except BaseException as e:
+                        # Bug in GTK
+                        logging.exception(e)
+                if not available:
+                    icon = pixbuf_opacity(icon, 0.5)
                 model.append((icon, text, available, text))
 
             known_executables = self.current_prefix.known_executables
@@ -1660,6 +1717,8 @@ class Main(Gtk.Application):
                 icon = missing_icon
                 available = os.path.exists(path)
                 icon = self.icon_extractor.get_from_cache(path, icon_size)
+                if not available:
+                    icon = pixbuf_opacity(icon, 0.5)
                 model.append((icon, os.path.basename(path), available, path))
             show_executables = bool(known_executables)
         else:
@@ -1732,5 +1791,4 @@ Options:
     else:
         if "-p" in args:
             logging.getLogger().setLevel(logging.DEBUG)
-        app = Main(sys.argv)
-        app.run()
+        Main().run(sys.argv)
