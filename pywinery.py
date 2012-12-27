@@ -36,6 +36,11 @@ import locale
 import datetime
 import urllib2
 
+try:
+    import cStringIO as StringIO
+except ImportError:
+    import StringIO
+
 from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf
 
 # App config
@@ -64,6 +69,11 @@ ELF = struct.Struct("=4sBBBBBxxxxxxx")
 
 def _(txt):
     return txt
+
+ico_header = struct.Struct("<HHH")
+ico_entry = struct.Struct("<BBBBHHLL")
+bmp_header = struct.Struct("<ccLHHL")
+bmp_infoheader = struct.Struct("<LLLHHLLLLLL")
 
 def elfarch(path):
     elfclass = 0
@@ -223,6 +233,81 @@ class ExeInfoExtractor(object):
     def get_from_cache(path):
         pass
 
+class IconData(object):
+
+    _pixbuf = None
+    @property
+    def pixbuf(self):
+        if self._pixbuf is None:
+            loader = GdkPixbuf.PixbufLoader.new_with_mime_type(self.mime)
+            loader.write(self.data)
+            loader.close()
+            self._pixbuf = loader.get_pixbuf()
+        return self._pixbuf
+
+    _mime_preference = ("image/png", "image/x-ms-bmp", "image/x-icon")
+    def __init__(self, width, height, mime, data):
+        self.width = width
+        self.height = height
+        self.mime = mime
+        self.data = data
+        self.size = len(data)
+        self.pixels = width*height
+
+    def __cmp__(self, x):
+        if x is None:
+            return 1
+        if self._mime_preference.index(self.mime) < self._mime_preference.index(x.mime):
+            return 1
+        return cmp(self.pixels, x.pixels) or cmp(self.size, x.size)
+
+    @classmethod
+    def from_group(cls, data):
+        z, icocur, num = ico_header.unpack(data.read(ico_header.size))
+        assert z == 0 and icocur == 1 and num > 0, "Bad ICO header"
+        index = [ico_entry.unpack(data.read(ico_entry.size)) for i in xrange(num)]
+        index.sort(key=operator.itemgetter(7))
+
+        for w, h, palette_size, z, cp_hx, bpp_hy, size, offset in index:
+            imgdata = data.read(size)
+            if imgdata.startswith("\x89PNG\r\n"):
+                # PNG, stored with header
+                yield cls(w, h, "image/png", imgdata)
+            else:
+                yield cls(w, h, "image/x-icon",
+                    ico_header.pack(z, icocur, 1) +
+                    ico_entry.pack(w, h, palette_size, z, cp_hx, bpp_hy, size, ico_header.size + ico_entry.size) +
+                    imgdata
+                    )
+            '''
+            else: # sometimes imgdata is empty
+                # BMP, must predict header
+                size += bmp_header.size
+                (info_size, width, height, planes, bit_count, compression,
+                 size_image, x_pels_per_meter, y_pels_per_meter, clr_used,
+                 clr_important) = bmp_infoheader.unpack(imgdata[:bmp_infoheader.size])
+                offset = bmp_header.size + info_size
+
+                if bit_count != 24:
+                    if clr_used == 0:
+                        if bit_count == 1:
+                            offset += 8
+                        elif bit_count == 4:
+                            offset += 64
+                        elif bit_count == 8:
+                            offset += 1024
+                    else:
+                        offset += 4 * clr_used
+
+                yield cls(
+                    w, h,
+                    "image/x-ms-bmp",
+                    bmp_header.pack("B", "M", size, 0, 0, offset) + imgdata
+                    )
+            '''
+
+
+
 class ExeIconExtractor(object):
     '''
     Try to extract the icon from a exe resources.
@@ -247,70 +332,45 @@ class ExeIconExtractor(object):
         self._default_icon_cache[icon_size] = icon
         return icon
 
+    def get_resources(self, path):
+        try:
+            return subprocess.check_output(
+                (self._wrestool, "-l", path),
+                env=CENV, stderr=DEVNULL
+                ).strip().splitlines()
+        except subprocess.CalledProcessError as e: # Non-zero rcode
+            logging.exception(e)
+        return ()
+
     def extract(self, path, icon_size):
         if (path, icon_size) in self._pixbuf_cache:
             return self._pixbuf_cache[path, icon_size]
         elif self._wrestool is None:
             return self._default_icon[path, icon_size]
-        try:
-            resources = subprocess.check_output(
-                (self._wrestool, "-l", path),
-                env=CENV, stderr=DEVNULL
-                ).strip().splitlines()
-        except subprocess.CalledProcessError: # Non-zero rcode
-            fallback = self._default_icon(path, icon_size)
-            self._pixbuf_cache[path, icon_size] = fallback
-            return fallback
-
-        images = {}
-        dist = sys.maxint
-        size = 0
-        result = None
-        for rline in resources:
+        selected = None
+        pixels = icon_size**2
+        for rline in self.get_resources(path):
             if "--type=14" in rline:
                 line = dict( # Parsing line
                     i.strip("[]").split("=", 1) if "=" in i else (i.strip("[]"), None)
                     for i in rline.split() if i)
+                out = subprocess.Popen(
+                    (self._wrestool, "-x", "--name=%(--name)s" % line, path),
+                    env=CENV, stderr=DEVNULL, stdout=subprocess.PIPE
+                    ).stdout
                 try:
-                    data = subprocess.check_output(
-                        (self._wrestool, "-x", "--name=%(--name)s" % line, path),
-                        env=CENV, stderr=DEVNULL
-                        ).strip()
-                    if not data:
-                        continue
-                except subprocess.CalledProcessError: # Non-zero rcode
-                    continue
-                except KeyError:
-                    continue
+                    for icondata in IconData.from_group(out):
+                        if icondata > selected:
+                            selected = icondata
                 except BaseException as e:
                     logging.exception(e)
-                    continue
-                try:
-                    loader = GdkPixbuf.PixbufLoader.new_with_mime_type("image/x-icon")
-                    loader.write(data)
-                    loader.close()
-                    pixbuf = loader.get_pixbuf()
-                except GLib.GError: # Glib cannot handle compressed icons
-                    loader.close()
-                    continue
-                except BaseException as e:
-                    loader.close()
-                    logging.exception(e)
-                    continue
-                picon_size = (pixbuf.get_height() + pixbuf.get_width()) / 2
-                psize = int(line["size"])
-                pdist = abs(icon_size - picon_size)
-                if pdist < dist or pdist == dist and size < psize:
-                    # Best size fit or equal size fit but better quality
-                    size = psize
-                    dist = pdist
-                    result = pixbuf
-        if dist == sys.maxint:
+
+        if selected is None:
             toreturn = self._default_icon(path, icon_size)
-        elif dist:
-            toreturn = result.scale_simple(icon_size, icon_size, GdkPixbuf.InterpType.HYPER)
+        elif selected.width != icon_size or selected.height != icon_size:
+            toreturn = selected.pixbuf.scale_simple(icon_size, icon_size, GdkPixbuf.InterpType.HYPER)
         else:
-            toreturn = result
+            toreturn = selected.pixbuf
         self._pixbuf_cache[path, icon_size] = toreturn
         return toreturn
 
@@ -511,7 +571,7 @@ class Prefix(object):
         '''
         True if prefix can run executables
         '''
-        return os.path.isdir(self._path)
+        return is_path_prefix(self._path)
 
     callback = None
     def __init__(self, path, defaults):
@@ -918,6 +978,8 @@ class Tray(Gtk.Application):
     #GLib.timeout_add(500, functools.partial(self._fixes_watch, popen))
 
 def pixbuf_opacity(pixbuf, opacity=1):
+    if opacity == 1:
+        return pixbuf
     opacity = int(255*opacity)
     width = pixbuf.get_width()
     height = pixbuf.get_height()
@@ -1667,7 +1729,10 @@ class Main(Gtk.Application):
     def action_set_exe_icons(self, icon_size):
         model = self["iconstore2"]
         for path, row in zip(self.current_prefix.known_executables, model):
-            row[0] = self.icon_extractor.extract(path, icon_size)
+            icon = self.icon_extractor.extract(path, icon_size)
+            if not row[2]:
+                icon = pixbuf_opacity(icon, 0.5)
+            row[0] = icon
 
     def action_set_app_icons(self):
         if self.given_exe:
@@ -1779,6 +1844,7 @@ Usage:
 Options:
     -v, --version     Prints Wine and Pywinery's version.
     -x, --nogui       Run with autodetected prefix if possible.
+    -f, --force-ask   Show dialog whether given executable is known or doesn't.
     -d, --debug       Show's wine debug messages.
     -h, --help        Show this help.
 ''' % locals())
