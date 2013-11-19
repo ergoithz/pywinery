@@ -75,6 +75,8 @@ ico_entry = struct.Struct("<BBBBHHLL")
 bmp_header = struct.Struct("<ccLHHL")
 bmp_infoheader = struct.Struct("<LLLHHLLLLLL")
 
+logger = logging.getLogger(__name__)
+
 def elfarch(path):
     elfclass = 0
     f = None
@@ -82,7 +84,7 @@ def elfarch(path):
         f = open(path, "rb")
         magic, elfclass, endianness, version, os_abi, abi_version = ELF.unpack(f.read(ELF.size))
     except struct.error as e:
-        logging.error("Wrong file format on %s" % path, extra={"exception":e})
+        logger.error("Wrong file format on %s" % path, extra={"exception":e})
     finally:
         if f:
             f.close()
@@ -202,6 +204,10 @@ def str_to_time(text, fmt="%Y-%m-%dT%H:%M:%S"):
     return time.mktime(datetime.datetime.strptime(text, fmt).timetuple())
 
 
+class NoWineException(Exception):
+    pass
+
+
 class CallbackList(list):
     __modifiers__ = {
         "__delitem__", "__delslice__", "__iadd__", "__imul__", "append",
@@ -218,6 +224,7 @@ class CallbackList(list):
                 if callable(getattr(self, attr)) and attr in self.__modifiers__:
                     wrapped = functools.partial(self.__wrapper__, getattr(self, attr), cb)
                     setattr(self, attr, wrapped)
+
 
 class ExeInfoExtractor(object):
     '''
@@ -263,7 +270,9 @@ class IconData(object):
 
     @classmethod
     def from_group(cls, data):
-        z, icocur, num = ico_header.unpack(data.read(ico_header.size))
+        headerdata = data.read(ico_header.size)
+        assert len(headerdata) == ico_header.size, "No valid icon data"
+        z, icocur, num = ico_header.unpack(headerdata)
         assert z == 0 and icocur == 1 and num > 0, "Bad ICO header"
         index = [ico_entry.unpack(data.read(ico_entry.size)) for i in xrange(num)]
         index.sort(key=operator.itemgetter(7))
@@ -307,7 +316,6 @@ class IconData(object):
             '''
 
 
-
 class ExeIconExtractor(object):
     '''
     Try to extract the icon from a exe resources.
@@ -327,7 +335,7 @@ class ExeIconExtractor(object):
             icon = self._theme.lookup_by_gicon(gicon, icon_size, 0).load_icon()
         except BaseException as e:
             # Bug in GTK
-            logging.exception(e)
+            logger.exception(e)
             icon = self._theme.load_icon("gtk-missing-image", icon_size, 0)
         self._default_icon_cache[icon_size] = icon
         return icon
@@ -339,7 +347,7 @@ class ExeIconExtractor(object):
                 env=CENV, stderr=DEVNULL
                 ).strip().splitlines()
         except subprocess.CalledProcessError as e: # Non-zero rcode
-            logging.exception(e)
+            logger.debug(e)
         return ()
 
     def extract(self, path, icon_size):
@@ -362,8 +370,10 @@ class ExeIconExtractor(object):
                     for icondata in IconData.from_group(out):
                         if icondata > selected:
                             selected = icondata
+                except AssertionError as e:
+                    logger.debug("Assertion error extracting icon group.", extra={"exception":e})
                 except BaseException as e:
-                    logging.exception(e)
+                    logger.exception(e)
 
         if selected is None:
             toreturn = self._default_icon(path, icon_size)
@@ -435,7 +445,7 @@ class ResolutionFixer(object):
                     env=CENV, stderr=DEVNULL
                     )
             except BaseException as e:
-                logging.exception(e)
+                logger.exception(e)
 
 class Prefix(object):
     '''
@@ -690,7 +700,7 @@ class Prefix(object):
         '''
         # Try to save lines
         if os.path.isdir(self._path):
-            logging.debug("Config written for %s." % self.name)
+            logger.debug("Config written for %s." % self.name)
             f = open(self._config, "w")
             f.writelines(lines)
             f.close()
@@ -719,6 +729,8 @@ class Prefix(object):
 
     def wine(self, command, env=None, debug=False):
         winepath = self["ww_wine"] or self["default_winepath"]
+        if winepath is None:
+            raise NoWineError
         popen = self.run((winepath,)+command, env, debug)
         return popen
 
@@ -726,7 +738,7 @@ class Prefix(object):
         '''
         Run any command in prefix environment.
         '''
-        logging.debug("Run: %s" % repr(command))
+        logger.debug("Run: %s" % repr(command))
         env = os.environ.copy() if env is None else env.copy()
         if "WINEDLLOVERRIDES" in env:
             dlloverrides = env["WINEDLLOVERRIDES"].split(";")
@@ -813,7 +825,7 @@ class Prefix(object):
             self._trash_time = time.time()
             f.trash(None)
         except GLib.GError:
-            logging.error("Cannot send prefix %s to trash." % self.path)
+            logger.error("Cannot send prefix %s to trash." % self.path)
 
     _trash_children_args = (
         ",".join((
@@ -1100,7 +1112,7 @@ class Main(Gtk.Application):
         self.skip_nowine_message = False
 
         if self.flag_mode_debug:
-            logging.getLogger().setLevel(logging.DEBUG)
+            logger.setLevel(logging.DEBUG)
 
     def action_open_directory(self, directory):
         for i in ("xdg-open", "thunar", "pacman", "nautilus", "dolphin"):
@@ -1108,7 +1120,7 @@ class Main(Gtk.Application):
                 subprocess.Popen((i, directory), env=self.default_environment)
                 break
         else:
-            logging.error("Unable to find a file browser.")
+            logger.error("Unable to find a file browser.")
 
     def action_launch(self):
         if self.given_msi:
@@ -1151,13 +1163,22 @@ class Main(Gtk.Application):
         return None, False
 
     def handle_commandline(self, main, commandline, data=None):
+        '''
+        GtkApplication entry point
+        '''
         args = commandline.get_arguments()
+
+        # Positional argument lookup (needs to be positional due "-" case )
         c = 1
         for i in args[1:]:
-            if i[0] != "-": break # Given command could contains - and --
-            elif i == "-x" or i == "--nogui": self.flag_mode_nogui = True
-            elif i == "-d" or i == "--debug": self.flag_mode_debug = True
-            elif i == "-f" or i == "--force-ask": self.flag_mode_ask = True
+            if i[0] != "-":
+                break # Given command could contains - and --
+            elif i == "-x" or i == "--nogui":
+                self.flag_mode_nogui = True
+            elif i == "-d" or i == "--debug":
+                self.flag_mode_debug = True
+            elif i == "-f" or i == "--force-ask":
+                self.flag_mode_ask = True
             c += 1
 
         if len(args) > c:
@@ -1221,23 +1242,13 @@ class Main(Gtk.Application):
         self.quit()
 
     def handle_iconview_item_activated(self, widget, path):
-        row = widget.get_model()[path]
-        if row[2]: # availability
-            iiiid = row[3] # internal iconview item id
-            if widget == self["iconview1"]:
-                exec_variables = {
-                    "prefix": self.current_prefix.path,
-                    "winepath": self.current_winepath
-                    }
-                self.current_prefix.run(
-                    [i % exec_variables for i in WINE_TOOLS[iiiid][2]],
-                    env=self.default_environment, debug=self.flag_mode_debug
-                    )
-            else:
-                self.current_prefix.wine(
-                    (iiiid,), # internal id for iconview2 is executable path
-                    env=self.default_environment, debug=self.flag_mode_debug
-                    )
+        self.aux_iconview_run(widget, path)
+
+    def handle_iconview_menu_run(self, widget):
+        self.aux_iconview_run()
+
+    def handle_iconview_menu_remove(self, widget):
+        self.aux_iconview_remove()
 
     def aux_dialog_prefix_name(self, name="", arch=None, new=False, transient=None):
         '''
@@ -1307,9 +1318,9 @@ class Main(Gtk.Application):
 
     def handle_iconview_keypress(self, widget, event):
         if event.keyval == Gdk.KEY_Delete:
-            model = self["iconview2"].get_model()
-            for row in self["iconview2"].get_selected_items():
-                self.current_prefix.known_executables.remove(model[row][3])
+            self.aux_iconview_remove()
+        elif event.keyval == Gdk.KEY_Execute:
+            pass
 
     def handle_treeview_keypress(self, widget, event):
         if event.keyval == Gdk.KEY_Delete:
@@ -1355,6 +1366,66 @@ class Main(Gtk.Application):
 
     def handle_winemenubuilder_toggled(self, widget):
         self.current_prefix.winemenubuilder_disable = widget.get_property("active")
+
+    def get_iconview_selected(self, widget=None):
+        if widget:
+            model = widget.get_model()
+            for row in widget.get_selected_items():
+                return model[row]
+            return None
+        # No widget given, search in all iconviews
+        for iconview in ("iconview1", "iconview2"):
+            model = self[iconview].get_model()
+            for row in self[iconview].get_selected_items():
+                return model[row]
+        return None
+
+    def aux_show_iconview_menu(self, event=None):
+        selected = self.get_iconview_selected()
+        if selected:
+            removable = os.path.isfile(selected[3])
+            available = selected[2]
+
+            # No item selected means no context menu
+            self["menuitem1"].set_property("sensitive", available)
+            self["menuitem3"].set_property("sensitive", removable)
+
+            if event:
+                ebutton = event.button
+                etime = event.time
+            else:
+                ebutton = 0
+                etime = Gtk.get_current_event_time()
+
+            self["menu1"].popup(None, None, None, None, ebutton, etime)
+
+    def aux_iconview_run(self, widget=None, path=None):
+        if path is None:
+            row = self.get_iconview_selected(widget)
+        else:
+            row = widget.get_model()[path]
+
+        if row[2]: # availability
+            iiiid = row[3] # internal iconview item id
+            if widget == self["iconview1"]:
+                exec_variables = {
+                    "prefix": self.current_prefix.path,
+                    "winepath": self.current_winepath
+                    }
+                self.current_prefix.run(
+                    [i % exec_variables for i in WINE_TOOLS[iiiid][2]],
+                    env=self.default_environment, debug=self.flag_mode_debug
+                    )
+            else:
+                self.current_prefix.wine(
+                    (iiiid,), # internal id for iconview2 is executable path
+                    env=self.default_environment, debug=self.flag_mode_debug
+                    )
+
+    def aux_iconview_remove(self):
+        model = self["iconview2"].get_model()
+        for row in self["iconview2"].get_selected_items():
+            self.current_prefix.known_executables.remove(model[row][3])
 
     _combo_internal_change = False
     def aux_handler_combo(self, row, dialog, allow_internals=True):
@@ -1708,14 +1779,34 @@ class Main(Gtk.Application):
         if any(not model[p][2] for p in widget.get_selected_items()):
             widget.unselect_all()
 
+    def handle_iconview_button(self, widget, event):
+        # Ignore double-clicks and triple-clicks
+        if event.triggers_context_menu() and event.type == Gdk.EventType.BUTTON_PRESS:
+            path = widget.get_path_at_pos(event.x, event.y)
+            if path:
+                widget.select_path(path)
+                self.aux_show_iconview_menu(event)
+                return True
+            else:
+                widget.unselect_all()
+        return False
+
+    def handle_iconview_menu(self, widget):
+        self.aux_show_iconview_menu()
+        return True
+
     _update_iconviews = False
     def handle_iconview_draw(self, widget, cairo_context):
         '''
         Calculate and set the best item-width for both iconviews
         Should be called once iconview items were drawed.
+
+        Params:
+            widget: GtkWidget (should be GtkIconView)
+            cairo_context: cairo draw context
         '''
         if self._update_iconviews:
-            # Run only when requested and until all iconviews are drawed
+            # Run only when requested, and after, both iconviews are draw
             item_widths = [
                 self[iconview].get_cell_rect(row.path, None)[1].width
                 for iconview in ("iconview1", "iconview2")
@@ -1747,6 +1838,7 @@ class Main(Gtk.Application):
         '''
         if self.current_prefix:
             icon_size = 32
+            text_size = int(icon_size*2.5)
             theme = Gtk.IconTheme.get_default()
 
             missing_icon = theme.load_icon("gtk-missing-image", icon_size, 0)
@@ -1769,10 +1861,10 @@ class Main(Gtk.Application):
                             break
                     except BaseException as e:
                         # Bug in GTK
-                        logging.exception(e)
+                        logger.exception(e)
                 if not available:
                     icon = pixbuf_opacity(icon, 0.5)
-                model.append((icon, text, available, text))
+                model.append((icon, text, available, text, text_size))
 
             known_executables = self.current_prefix.known_executables
 
@@ -1784,7 +1876,7 @@ class Main(Gtk.Application):
                 icon = self.icon_extractor.get_from_cache(path, icon_size)
                 if not available:
                     icon = pixbuf_opacity(icon, 0.5)
-                model.append((icon, os.path.basename(path), available, path))
+                model.append((icon, os.path.basename(path), available, path, text_size))
             show_executables = bool(known_executables)
         else:
             self["iconstore1"].clear()
@@ -1798,6 +1890,7 @@ class Main(Gtk.Application):
             self["iconview1"].set_property("item-width", -1)
 
         self["iconview1"].set_property("expand", not show_executables)
+        self["iconvi"]
         self["label10"].set_label(_("Known executables") if show_executables else _("No known executables"))
         self["iconview2"].set_property("visible", show_executables)
 
@@ -1833,6 +1926,8 @@ class Main(Gtk.Application):
         self._model_work = False
 
 if __name__ == "__main__":
+    logger.addHandler(logging.StreamHandler())
+
     args = sys.argv[1:]
     cmd = sys.argv[0]
 
@@ -1850,11 +1945,9 @@ Options:
 ''' % locals())
     elif "--version" in args or "-v" in args:
         print("%s-%s; %s" % (
-            cmd,
+            os.path.basename(cmd),
             ".".join(str(i) for i in __version__),
             wineVersion() or "wine not found in PATH.")
             )
     else:
-        if "-p" in args:
-            logging.getLogger().setLevel(logging.DEBUG)
         Main().run(sys.argv)
