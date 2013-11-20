@@ -23,7 +23,7 @@ PyWinery is useful and easy-to-use due its dialog-like interface. There is a lot
 I've decided, starting from 0.2 release, rename the "Open dialog", with "Create folder" button, from "New prefix" to "Import prefix", because users with no wine experience used to get a bit confused with it. I've made a new "New prefix" dialog which only asks user a prefix name. (see BottleSpec implementation)
 *This difference should be noted somewhere*, advising "Import prefix" dialog still allow users create their prefixes wherever they want.
 
-
+On 0.3 release, I made a huge UI overhaul based on user interaction analysis, so I replaced the context menu based interaction pattern with a more obvious one, showing buttons for adding or importing prefixes, executables, and replaced the threeview based configuration dialog with a classic configuration dialog design as seen in other applications. Based on user input, this changes seems to be a big step towards optimal pywinery's ease-to-use goal.
 
 == BottleSpec ==
 This app follow the [http://wiki.winehq.org/BottleSpec BottleSpec specification], which makes it compatible with other prefix managers.
