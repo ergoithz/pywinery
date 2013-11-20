@@ -1242,7 +1242,10 @@ class Main(Gtk.Application):
         self.quit()
 
     def handle_iconview_item_activated(self, widget, path):
-        self.aux_iconview_run(widget, path)
+        if widget.get_model()[path][2]:
+            self.aux_iconview_run(widget, path)
+        else:
+            pass
 
     def handle_iconview_menu_run(self, widget):
         self.aux_iconview_run()
@@ -1324,24 +1327,29 @@ class Main(Gtk.Application):
 
     def handle_treeview_keypress(self, widget, event):
         if event.keyval == Gdk.KEY_Delete:
+            return self.aux_treeview_remove()
+
+    def handle_treeview_button(self, widget, event):
+        # Ignore double-clicks and triple-clicks
+        if event.triggers_context_menu() and event.type == Gdk.EventType.BUTTON_PRESS:
+            path = widget.get_path_at_pos(event.x, event.y)
             selection = widget.get_selection()
-            # Prefix removal
-            model, paths = selection.get_selected_rows()
-            path = paths[0] # Treeview selection mode is single
-            row = model[path]
-            prefix = self.prefixes_by_path.pop(row[0])
-            self.prefixes.remove(prefix)
-            prefix.send_to_trash()
-            self.trash_prefix = prefix
-            model.remove(row.iter)
-            # Other row selection
-            for row in model:
-                if row[0]:
-                    self.current_prefix = self.prefixes_by_path[row[0]]
-                    break
+            model = widget.get_model()
+            if path and model[path[0]][4] == self.LIST_PREFIX:
+                selection.select_path(path[0])
+                self.aux_show_treeview_menu(event)
             else:
-                self.current_prefix = None
-            self.guiPrefix()
+                return True # Prevent selection change
+        return False
+
+    def handle_treeview_menu(self, widget):
+        return self.aux_show_treeview_menu()
+
+    def handle_treeview_menu_duplicate(self, widget):
+        pass
+
+    def handle_treeview_menu_remove(self, widget):
+        self.aux_treeview_remove()
 
     def handle_remember(self, *args):
         self.flag_remember = self["checkbutton1"].get_property("active")
@@ -1371,19 +1379,19 @@ class Main(Gtk.Application):
         if widget:
             model = widget.get_model()
             for row in widget.get_selected_items():
-                return model[row]
-            return None
+                return widget, model[row]
+            return widget, None
         # No widget given, search in all iconviews
         for iconview in ("iconview1", "iconview2"):
             model = self[iconview].get_model()
             for row in self[iconview].get_selected_items():
-                return model[row]
-        return None
+                return self[iconview], model[row]
+        return None, None
 
     def aux_show_iconview_menu(self, event=None):
-        selected = self.get_iconview_selected()
+        widget, selected = self.get_iconview_selected()
         if selected:
-            removable = os.path.isfile(selected[3])
+            removable = widget == self["iconview2"]
             available = selected[2]
 
             # No item selected means no context menu
@@ -1398,12 +1406,33 @@ class Main(Gtk.Application):
                 etime = Gtk.get_current_event_time()
 
             self["menu1"].popup(None, None, None, None, ebutton, etime)
+            return True
+        return False
+
+    def aux_show_treeview_menu(self, event=None):
+        if self.current_prefix:
+            # No item selected means no context menu
+            #self["menuitem1"].set_property("sensitive", available)
+
+            if event:
+                ebutton = event.button
+                etime = event.time
+            else:
+                ebutton = 0
+                etime = Gtk.get_current_event_time()
+
+            self["menu2"].popup(None, None, None, None, ebutton, etime)
+            return True
+        return False
 
     def aux_iconview_run(self, widget=None, path=None):
         if path is None:
-            row = self.get_iconview_selected(widget)
-        else:
+            widget, row = self.get_iconview_selected(widget)
+        elif widget:
             row = widget.get_model()[path]
+        else:
+            logging.warn("aux_iconview_run called with path and no widget")
+            return
 
         if row[2]: # availability
             iiiid = row[3] # internal iconview item id
@@ -1426,6 +1455,30 @@ class Main(Gtk.Application):
         model = self["iconview2"].get_model()
         for row in self["iconview2"].get_selected_items():
             self.current_prefix.known_executables.remove(model[row][3])
+
+    def aux_treeview_remove(self):
+        widget = self["treeview1"]
+        selection = widget.get_selection()
+        # Prefix removal
+        model, paths = selection.get_selected_rows()
+        path = paths[0] # Treeview selection mode is single
+        row = model[path]
+        prefix = self.prefixes_by_path.pop(row[0])
+        self.prefixes.remove(prefix)
+        prefix.send_to_trash()
+        self.trash_prefix = prefix
+        model.remove(row.iter)
+        # Other row selection
+        columns = widget.get_columns()
+        for row in model:
+            if row[0]:
+                widget.set_cursor(row.path)
+                self.current_prefix = self.prefixes_by_path[row[0]]
+                break
+        else:
+            self.current_prefix = None
+        self.guiPrefix()
+        return True
 
     _combo_internal_change = False
     def aux_handler_combo(self, row, dialog, allow_internals=True):
@@ -1776,8 +1829,6 @@ class Main(Gtk.Application):
         model = widget.get_model()
         if iconview.get_selected_items() and widget.get_selected_items():
             iconview.unselect_all()
-        if any(not model[p][2] for p in widget.get_selected_items()):
-            widget.unselect_all()
 
     def handle_iconview_button(self, widget, event):
         # Ignore double-clicks and triple-clicks
@@ -1785,15 +1836,13 @@ class Main(Gtk.Application):
             path = widget.get_path_at_pos(event.x, event.y)
             if path:
                 widget.select_path(path)
-                self.aux_show_iconview_menu(event)
-                return True
+                return self.aux_show_iconview_menu(event)
             else:
                 widget.unselect_all()
         return False
 
     def handle_iconview_menu(self, widget):
-        self.aux_show_iconview_menu()
-        return True
+        return self.aux_show_iconview_menu()
 
     _update_iconviews = False
     def handle_iconview_draw(self, widget, cairo_context):
