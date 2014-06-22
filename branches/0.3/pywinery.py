@@ -14,7 +14,6 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
-# TODO(spayder26): duplicate prefix
 # TODO(spayder26): locales
 __app__ = "pywinery"
 __version__ = (0, 3, 0)
@@ -35,13 +34,16 @@ import time
 import locale
 import datetime
 import urllib2
+import math
+import shutil
+import thread
 
 try:
     import cStringIO as StringIO
 except ImportError:
     import StringIO
 
-from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf
+from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf, GObject
 
 # App config
 # app_path = os.path.dirname(os.path.abspath(__file__))
@@ -63,6 +65,8 @@ DEVNULL = open(os.devnull, "a")
 # Environ with no lang (for output parsing)
 CENV = environ.copy()
 CENV["LANG"] = "c"
+
+INFINITE = float("inf")
 
 # ELF header struct
 ELF = struct.Struct("=4sBBBBBxxxxxxx")
@@ -226,6 +230,33 @@ class CallbackList(list):
                     setattr(self, attr, wrapped)
 
 
+class TaskController(object):
+    UNSET = type('UnsetType', (object,), {})
+
+    @property
+    def finished(self):
+        return self.cancel or self.failed or self.success
+
+    def __init__(self, target=None, controlled=False):
+        self.cancel = False
+        self.failed = False
+        self.success = False
+        self.result = self.UNSET
+        self.target = target
+        self.controlled = controlled
+
+    def run(self):
+        try:
+            if self.controlled:
+                self.result = self.target(self)
+            else:
+                self.result = self.target()
+            self.success = True
+        except BaseException as e:
+            logger.error(e)
+            self.failed = False
+
+
 class ExeInfoExtractor(object):
     '''
     Try to extract the icon from a exe resources.
@@ -240,6 +271,7 @@ class ExeInfoExtractor(object):
     def get_from_cache(path):
         pass
 
+
 class IconData(object):
 
     _pixbuf = None
@@ -252,21 +284,14 @@ class IconData(object):
             self._pixbuf = loader.get_pixbuf()
         return self._pixbuf
 
-    _mime_preference = ("image/png", "image/x-ms-bmp", "image/x-icon")
-    def __init__(self, width, height, mime, data):
+    def __init__(self, width, height, mime, bpp, data):
         self.width = width
         self.height = height
         self.mime = mime
         self.data = data
         self.size = len(data)
+        self.bpp = bpp
         self.pixels = width*height
-
-    def __cmp__(self, x):
-        if x is None:
-            return 1
-        if self._mime_preference.index(self.mime) < self._mime_preference.index(x.mime):
-            return 1
-        return cmp(self.pixels, x.pixels) or cmp(self.size, x.size)
 
     @classmethod
     def from_group(cls, data):
@@ -274,16 +299,21 @@ class IconData(object):
         assert len(headerdata) == ico_header.size, "No valid icon data"
         z, icocur, num = ico_header.unpack(headerdata)
         assert z == 0 and icocur == 1 and num > 0, "Bad ICO header"
-        index = [ico_entry.unpack(data.read(ico_entry.size)) for i in xrange(num)]
-        index.sort(key=operator.itemgetter(7))
 
+        # Read all headers
+        index = [ico_entry.unpack(data.read(ico_entry.size)) for i in xrange(num)]
+
+        # Read data
         for w, h, palette_size, z, cp_hx, bpp_hy, size, offset in index:
             imgdata = data.read(size)
+            bpp = max(
+                int(math.ceil(math.log(palette_size, 2))) if palette_size else 0,
+                bpp_hy)
             if imgdata.startswith("\x89PNG\r\n"):
                 # PNG, stored with header
-                yield cls(w, h, "image/png", imgdata)
-            else:
-                yield cls(w, h, "image/x-icon",
+                yield cls(w, h, "image/png", bpp, imgdata)
+            elif imgdata:
+                yield cls(w, h, "image/x-icon", bpp,
                     ico_header.pack(z, icocur, 1) +
                     ico_entry.pack(w, h, palette_size, z, cp_hx, bpp_hy, size, ico_header.size + ico_entry.size) +
                     imgdata
@@ -356,7 +386,8 @@ class ExeIconExtractor(object):
         elif self._wrestool is None:
             return self._default_icon[path, icon_size]
         selected = None
-        pixels = icon_size**2
+        selected_score = INFINITE, 0
+        pixels = icon_size*icon_size
         for rline in self.get_resources(path):
             if "--type=14" in rline:
                 line = dict( # Parsing line
@@ -368,8 +399,12 @@ class ExeIconExtractor(object):
                     ).stdout
                 try:
                     for icondata in IconData.from_group(out):
-                        if icondata > selected:
+                        print icondata.bpp
+                        score = abs(pixels - icondata.pixels), -icondata.bpp
+                        if score < selected_score:
+                            selected_score = score
                             selected = icondata
+
                 except AssertionError as e:
                     logger.debug("Assertion error extracting icon group.", extra={"exception":e})
                 except BaseException as e:
@@ -377,7 +412,7 @@ class ExeIconExtractor(object):
 
         if selected is None:
             toreturn = self._default_icon(path, icon_size)
-        elif selected.width != icon_size or selected.height != icon_size:
+        elif pixels != selected.pixels:
             toreturn = selected.pixbuf.scale_simple(icon_size, icon_size, GdkPixbuf.InterpType.HYPER)
         else:
             toreturn = selected.pixbuf
@@ -391,7 +426,7 @@ class ExeIconExtractor(object):
         return self._pixbuf_cache.get((path, icon_size), self._default_icon(path, icon_size))
 
 # FIXME(spayder26): remove when fixed
-# User xrandr to protect desktop resolution from bug
+# Use xrandr to protect desktop resolution from bug
 # http://bugs.winehq.org/show_bug.cgi?id=10841
 # http://wiki.winehq.org/FAQ#head-acb200594b5bcd19722faf6fd34b60cc9c2f237b
 class ResolutionFixer(object):
@@ -713,6 +748,41 @@ class Prefix(object):
     def _update_known_executables(self, exelist):
         self["ww_known_executables"] = ":".join(i.replace(":","\\:") for i in exelist)
 
+    def _copy_ignore(self, controller, directory, contents):
+        '''
+        Return those contents
+        '''
+        if controller.cancel:
+            return contents
+        return ()
+
+    def copy(self, controller=None):
+        '''
+        Copy prefix to new location a return
+        '''
+        if controller is None:
+            controller = TaskController()
+        path = alternative_if_exists(self._path)
+        os.mkdir(path)
+        for filename in os.listdir(self._path):
+            spath = os.path.join(self._path, filename)
+            dpath = os.path.join(path, filename)
+            if controller.cancel:
+                break
+            elif os.path.isdir(spath):
+                shutil.copytree(
+                    spath,
+                    dpath,
+                    symlinks=True,
+                    ignore=functools.partial(self._copy_ignore, controller)
+                    )
+            else:
+                shutil.copy2(spath, dpath)
+        if controller.cancel:
+            shutil.rmtree(path)
+            return None
+        return self.__class__(path, self._defaults)
+
     def relativize(self, path):
         path = os.path.abspath(path)
         home = environ["HOME"]
@@ -1001,6 +1071,67 @@ def pixbuf_opacity(pixbuf, opacity=1):
     pixbuf.composite(r, 0, 0, width, height, 0, 0, 1, 1, GdkPixbuf.InterpType.NEAREST, opacity)
     return r
 
+
+class ProgressDialog(Gtk.MessageDialog):
+    @property
+    def cancel(self):
+        return self.controller.cancel
+
+    @property
+    def success(self):
+        return self.controller.success
+
+    @property
+    def failed(self):
+        return self.controller.failed
+
+    @property
+    def finished(self):
+        return self.controller.finished
+
+    @property
+    def result(self):
+        return self.controller.result
+
+    def __init__(self, parent, message, target, controlled=False):
+        Gtk.MessageDialog.__init__(self,
+            parent,
+            Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+            Gtk.MessageType.INFO,
+            Gtk.ButtonsType.CANCEL,
+            '\n'.join((message, _('Please wait...')))
+            )
+
+        self.set_modal(True)
+        self.set_title(_('Cloning...'))
+        self.set_border_width(12)
+        self.connect('delete_event', self.handle_delete)
+
+        self.progress = Gtk.ProgressBar()
+        self.progress.show()
+        self.vbox.add(self.progress)
+
+        self.controller = TaskController(target, controlled)
+        self.thread = thread.start_new_thread(self.controller.run, ())
+        self.timer = GLib.timeout_add(100, self.handle_update)
+        self.source_id = self.timer
+
+    def run(self):
+        self.controller.cancel = Gtk.MessageDialog.run(self) == Gtk.ButtonsType.CANCEL
+        self.destroy()
+
+    def handle_update(self):
+        if self.controller.finished:
+            self.destroy()
+            return False
+        self.progress.pulse()
+        return True
+
+    def handle_delete(self, widget, *args):
+        if not self.controller.finished:
+            self.controller.cancel = True
+
+
 class Main(Gtk.Application):
     _current_prefix = None
     @property
@@ -1055,6 +1186,7 @@ class Main(Gtk.Application):
             flags=Gio.ApplicationFlags.NON_UNIQUE | Gio.ApplicationFlags.HANDLES_COMMAND_LINE
             )
         self.connect("command-line", self.handle_commandline)
+        self.connect("error-message", self.handle_error)
 
         '''
         monitor = Gio.File.new_for_path(
@@ -1229,13 +1361,12 @@ class Main(Gtk.Application):
             self.guiStart()
         return 0
 
-    # TODO
-    def handler_error(self, code=None, message=None):
-        if code == None:
-            self.xml.get_widget("errorbox").set_property("visible", False)
-        else:
-            self.xml.get_widget("labelerror").set_label(message)
-            self.xml.get_widget("errorbox").set_property("visible", True)
+    def handle_error(self, widget, message):
+        #TODO(spayder26): find an stable-enough version of glade and add an error infobar
+        # self["errorbox"].set_property("visible", False)
+        #self["labelerror"].set_label(message)
+        #self["infobar3"].set_property("visible", True)
+        pass
 
     def handle_button_run(self, widget):
         self.action_launch()
@@ -1346,7 +1477,18 @@ class Main(Gtk.Application):
         return self.aux_show_treeview_menu()
 
     def handle_treeview_menu_duplicate(self, widget):
-        pass
+        progress = ProgressDialog(
+            self['dialog_main'],
+            _('Prefix is being copied.'),
+            self.current_prefix.copy,
+            True
+            )
+        progress.run()
+        if progress.success:
+            self.aux_add_prefix(progress.result)
+        elif progress.failed:
+            self.emit('error-message', 'Prefix duplication failed.')
+        self.emit('error-message', 'asdfasdfasdfasdf')
 
     def handle_treeview_menu_remove(self, widget):
         self.aux_treeview_remove()
@@ -1546,12 +1688,16 @@ class Main(Gtk.Application):
             dialog1.destroy()
         if new_prefix:
             new_prefix.save(env=self.default_environment)
-            if not new_prefix in self.prefixes:
-                self.prefixes_by_path[prefix.path] = new_prefix
-                self.prefixes.append(new_prefix)
-            self.guiPrefix()
-            self.current_prefix = new_prefix
+            self.aux_add_prefix(new_prefix)
         return internal
+
+    def aux_add_prefix(self, prefix, select=True):
+        if not prefix in self.prefixes:
+            self.prefixes_by_path[prefix.path] = prefix
+            self.prefixes.append(prefix)
+        self.guiPrefix()
+        if select:
+            self.current_prefix = prefix
 
     def action_prefix_changed(self, prefix=None):
         if prefix is None:
@@ -1727,6 +1873,9 @@ class Main(Gtk.Application):
         if response == 0:
             self["infobar2"].set_property("visible", False)
             self.skip_nowine_message = True
+
+    def handle_infobar3_response(self, windget, response):
+        self["infobar3"].set_property("visible". False)
 
     def _app_quit(self):
         Gtk.Application.quit(self)
@@ -1973,6 +2122,11 @@ class Main(Gtk.Application):
         model.append((None, Gtk.STOCK_ADD, _("Add existing prefix"), None, self.LIST_ADD))
         model.append((None, Gtk.STOCK_NEW, _("Create new prefix"), None, self.LIST_NEW))
         self._model_work = False
+
+# Register error-message custom signal
+GObject.signal_new('error-message', Gtk.Application,
+                   GObject.SIGNAL_RUN_FIRST | GObject.SIGNAL_ACTION,
+                   GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
 
 if __name__ == "__main__":
     logger.addHandler(logging.StreamHandler())
