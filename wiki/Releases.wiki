@@ -1,5 +1,5 @@
 #labels Featured,Downloads,Releases
-= Downloads =
+= Current releases =
 
 == 0.3-2 "still alive" release ==
 
@@ -21,3 +21,43 @@
  * [https://docs.google.com/file/d/0B4gfhO4VUgcfRnc5SDNHSzIzdFk pywinery_0.3-2_all.deb] (deb package for debian or ubuntu)
 
  * [https://drive.google.com/file/d/0B4gfhO4VUgcfb2Z1RkNQT2wyYlU pywinery_0.3-2.tar.gz] (source tarball)
+
+= Old 'deprecated' releases =
+
+Work in progress...
+
+== 0.2-0 release ==
+
+===Screenshots===
+http://pywinery.googlecode.com/svn/screenshots/0.2-0a.png
+
+(Launching an exe)
+
+
+http://pywinery.googlecode.com/svn/screenshots/0.2-0b.png
+
+(Prefix management interface, now features all launcher options)
+
+
+==0.1-7 release==
+
+===Screenshots===
+http://pywinery.googlecode.com/svn/screenshots/0.1-7a.png
+
+(Launching an exe, but standalone is much like this)
+
+
+http://pywinery.googlecode.com/svn/screenshots/0.1-7b.png
+
+(Prefix management dialog)
+
+
+===0.1-3 release screenshots===
+http://pywinery.googlecode.com/svn/screenshots/0.1-3a.png
+
+(Launching a .exe file inside a known prefix)
+
+
+http://pywinery.googlecode.com/svn/screenshots/0.1-3b.png
+
+(Running alone)
