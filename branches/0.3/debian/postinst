@@ -52,10 +52,30 @@ update_defaults_list() {
   done
 }
 
+HICOLOR_DIR="/usr/share/icons/hicolor" # reasonable default
+if [ -n "$XDG_DATA_DIRS" ]; then
+    xdg_system_dirs="$XDG_DATA_DIRS"
+else
+    xdg_system_dirs="/usr/local/share/:/usr/share/"
+fi
+
+for x in `echo "$xdg_system_dirs" | sed 's/:/ /g'`; do
+  if [ -w $x/icons/hicolor ]; then
+    HICOLOR_DIR="$x/icons/hicolor"
+    break
+  fi
+done
+
+add_icon() {
+    mkdir -p "$HICOLOR_DIR/$1/apps"
+    cp $2 "$HICOLOR_DIR/$1/apps/`basename $2`"
+}
 
 case "$1" in
     configure)
         update_defaults_list 'pywinery.desktop'
+        add_icon scalable '/usr/share/pywinery/pywinery.svg'
+        xdg-icon-resource forceupdate
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

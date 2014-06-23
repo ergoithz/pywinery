@@ -21,8 +21,10 @@ setup(name         = 'pywinery',
                      ],
       packages     = ['pywinery'],
       data_files   = [
-            ('/usr/share/pywinery', ['pywinery/gui.glade']),
-            ('/usr/share/icons/hicolor/scalable/apps', ['pywinery/pywinery.svg']),
+            ('/usr/share/pywinery', [
+                     'pywinery/gui.glade',
+                     'pywinery/pywinery.svg'
+                                    ]),
             ('/usr/share/applications', ["pywinery.desktop"]),
                      ],
       scripts      = ['scripts/pywinery']
