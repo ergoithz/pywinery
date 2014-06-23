@@ -1,0 +1,23 @@
+#labels Featured,Downloads,Releases
+= Downloads =
+
+== 0.3-2 "still alive" release ==
+
+2014.06.24
+
+===Changelog===
+  * Prefix duplication implemented.
+  * Some dependency fixes (fixes issue#13).
+  * Simple context menu added for config iconviews after some user testing.
+  * Some logging and expected exceptions have been moved to debug logger level or silenced.
+  * Ported to Gtk3
+  * Wine bug workarounds implemented.
+  * Brief code rewrite.
+  * New UI design for better usability.
+  * Exe previews.
+  * Changelog dates fixed.
+
+===Downloads==
+ * [https://docs.google.com/file/d/0B4gfhO4VUgcfRnc5SDNHSzIzdFk pywinery_0.3-2_all.deb] (deb package for debian or ubuntu)
+
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfb2Z1RkNQT2wyYlU pywinery_0.3-2.tar.gz] (source tarball)
