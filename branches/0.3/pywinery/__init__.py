@@ -95,6 +95,7 @@ def elfarch(path):
     return 64 if elfclass else 32
 
 def is_path_prefix(path):
+    cfg = os.path.join(path, "wrapper.cfg")
     if (
       os.path.isdir(path) and
       os.path.isfile(os.path.join(path, "system.reg")) and
@@ -102,8 +103,8 @@ def is_path_prefix(path):
       os.path.isdir(os.path.join(path, "dosdevices"))
       ):
         return True
-    elif os.path.isfile(os.path.join(path, "wrapper.cfg")):
-        f = open("wrapper.cfg")
+    elif os.path.isfile(cfg):
+        f = open(cfg)
         data = f.read()
         f.close()
         return "ww_name=" in data
@@ -235,26 +236,42 @@ class TaskController(object):
 
     @property
     def finished(self):
-        return self.cancel or self.failed or self.success
+        return self.cancel or self._failed or self._success
+
+    @property
+    def success(self):
+        return self._success
+
+    @property
+    def result(self):
+        return self._result
+
+    @property
+    def failed(self):
+        return self._failed
+
+    _failed = False
+    _success = False
+    _result = UNSET
+    _target = None
+    _controlled = False
 
     def __init__(self, target=None, controlled=False):
         self.cancel = False
-        self.failed = False
-        self.success = False
-        self.result = self.UNSET
-        self.target = target
-        self.controlled = controlled
+        self._target = target
+        self._controlled = controlled
 
     def run(self):
         try:
-            if self.controlled:
-                self.result = self.target(self)
+            if self._controlled:
+                self._result = self._target(self)
             else:
-                self.result = self.target()
-            self.success = True
+                self._result = self._target()
+            if not self.cancel:
+                self._success = True
         except BaseException as e:
-            logger.error(e)
-            self.failed = False
+            logger.exception(e)
+            self._failed = True
 
 
 class ExeInfoExtractor(object):
@@ -399,7 +416,7 @@ class ExeIconExtractor(object):
                     ).stdout
                 try:
                     for icondata in IconData.from_group(out):
-                        print icondata.bpp
+                        logger.debug('BPP for icondata was %r' % icondata.bpp)
                         score = abs(pixels - icondata.pixels), -icondata.bpp
                         if score < selected_score:
                             selected_score = score
@@ -764,21 +781,17 @@ class Prefix(object):
             controller = TaskController()
         path = alternative_if_exists(self._path)
         os.mkdir(path)
+        ignore = functools.partial(self._copy_ignore, controller)
         for filename in os.listdir(self._path):
             spath = os.path.join(self._path, filename)
             dpath = os.path.join(path, filename)
             if controller.cancel:
                 break
             elif os.path.isdir(spath):
-                shutil.copytree(
-                    spath,
-                    dpath,
-                    symlinks=True,
-                    ignore=functools.partial(self._copy_ignore, controller)
-                    )
+                shutil.copytree(spath, dpath, symlinks=True, ignore=ignore)
             else:
                 shutil.copy2(spath, dpath)
-        if controller.cancel:
+        if controller.cancel and os.path.isdir(path):
             shutil.rmtree(path)
             return None
         return self.__class__(path, self._defaults)
@@ -1105,7 +1118,6 @@ class ProgressDialog(Gtk.MessageDialog):
         self.set_modal(True)
         self.set_title(_('Cloning...'))
         self.set_border_width(12)
-        self.connect('delete_event', self.handle_delete)
 
         self.progress = Gtk.ProgressBar()
         self.progress.show()
@@ -1117,8 +1129,13 @@ class ProgressDialog(Gtk.MessageDialog):
         self.source_id = self.timer
 
     def run(self):
-        self.controller.cancel = Gtk.MessageDialog.run(self) == Gtk.ButtonsType.CANCEL
+        rid = Gtk.MessageDialog.run(self)
+        self.controller.cancel = rid in (
+            Gtk.ResponseType.CANCEL,
+            Gtk.ResponseType.DELETE_EVENT
+            )
         self.destroy()
+        return rid
 
     def handle_update(self):
         if self.controller.finished:
@@ -1126,10 +1143,6 @@ class ProgressDialog(Gtk.MessageDialog):
             return False
         self.progress.pulse()
         return True
-
-    def handle_delete(self, widget, *args):
-        if not self.controller.finished:
-            self.controller.cancel = True
 
 
 class Main(Gtk.Application):
@@ -1486,9 +1499,8 @@ class Main(Gtk.Application):
         progress.run()
         if progress.success:
             self.aux_add_prefix(progress.result)
-        elif progress.failed:
+        else:
             self.emit('error-message', 'Prefix duplication failed.')
-        self.emit('error-message', 'asdfasdfasdfasdf')
 
     def handle_treeview_menu_remove(self, widget):
         self.aux_treeview_remove()
