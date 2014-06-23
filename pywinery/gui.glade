@@ -1118,14 +1118,14 @@
         <property name="spacing">1</property>
         <child internal-child="action_area">
           <object class="GtkButtonBox" id="messagedialog-action_area3">
-            <property name="can_focus">False</property>
+            <property name="can_focus">True</property>
             <property name="layout_style">end</property>
             <child>
-              <object class="GtkButton" id="button10">
-                <property name="label">gtk-add</property>
+              <object class="GtkButton" id="button13">
+                <property name="label">gtk-cancel</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
+                <property name="receives_default">False</property>
                 <property name="use_stock">True</property>
               </object>
               <packing>
@@ -1135,11 +1135,11 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="button13">
-                <property name="label">gtk-cancel</property>
+              <object class="GtkButton" id="button10">
+                <property name="label">gtk-add</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="receives_default">False</property>
+                <property name="receives_default">True</property>
                 <property name="use_stock">True</property>
               </object>
               <packing>
