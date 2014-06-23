@@ -1,17 +1,13 @@
 Source: pywinery
 Maintainer: Felipe A. Hernandez <spayder26@gmail.com>
-Build-Depends: debhelper (>= 5.0.38)
-Build-Depends-Indep: cdbs (>= 0.4.43), python-dev (>= 2.6), python (>= 2.6), python-central
+Build-Depends: debhelper (>= 8), dh-python, python (>= 2.6.6-3~), python-setuptools, librsvg2-bin
 Standards-Version: 3.7.2
-XS-Python-Version: all
-Original-Maintainer: Felipe A. Hernandez <spayder26@gmail.com>
+X-Python-Version: >= 2.6.6-3
 
 Package: pywinery
-Maintainer: Felipe A. Hernandez <spayder26@gmail.com>
 Homepage: http://code.google.com/p/pywinery
 Section: utils
 Priority: optional
-Installed-Size: 216
 Architecture: all
 Depends: ${python:Depends}, python-gobject (>=3.4), xdg-utils, icoutils
 Recommends: wine, winetricks
@@ -23,6 +19,5 @@ Description: Simple wineprefix manager and launcher
  .
  Features:
    * Simple dialog interface.
-   * Shortcuts to winecfg, wine cmd, winetricks and more.
-   * Easy prefix creation and management, BottleSpec compliant.
-Original-Maintainer: Felipe A. Hernandez <spayder26@gmail.com>
+   * Shortcuts to winecfg, wine cmd, winetricks and other utilities.
+   * Easy prefix creation, duplication and management, BottleSpec compliant.
