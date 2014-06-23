@@ -1109,7 +1109,6 @@
     <property name="type_hint">dialog</property>
     <property name="skip_taskbar_hint">True</property>
     <property name="message_type">question</property>
-    <property name="buttons">cancel</property>
     <property name="text" translatable="yes">Adding new prefix</property>
     <property name="secondary_text" translatable="yes">How should it be named?</property>
     <child internal-child="vbox">
@@ -1122,14 +1121,25 @@
             <property name="can_focus">False</property>
             <property name="layout_style">end</property>
             <child>
-              <placeholder/>
-            </child>
-            <child>
               <object class="GtkButton" id="button10">
                 <property name="label">gtk-add</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="button13">
+                <property name="label">gtk-cancel</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">False</property>
                 <property name="use_stock">True</property>
               </object>
               <packing>
@@ -1196,6 +1206,7 @@
     </child>
     <action-widgets>
       <action-widget response="1">button10</action-widget>
+      <action-widget response="0">button13</action-widget>
     </action-widgets>
   </object>
   <object class="GtkMessageDialog" id="dialog_remember">
