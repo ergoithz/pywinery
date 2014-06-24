@@ -1,28 +1,45 @@
-#labels Deprecated,Downloads
+#labels Featured,Downloads,Releases
 = Old 'deprecated' releases =
 
-Work in progress...
+Downloads on this page are collected for historical purposes, and cannot be considered production ready (most of them are plain broken with non-ancient wine releases).
 
-== 0.2-0 release ==
+If you miss some past functionality, or a recent version do not work for you, please [https://code.google.com/p/pywinery/issues/entry fill a bug report].
+
+== 0.2 releases ==
+
+===Downloads===
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfanctTEpaNHQtSjA pywinery_0.2-1_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfVkg3dFJTUEEyQjg pywinery_0.2-1_src.tar.gz]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfbTVJbWdjbk5lOEU pywinery_0.2-0_all.deb]
 
 ===Screenshots===
 http://pywinery.googlecode.com/svn/screenshots/0.2-0a.png
 
-(Launching an exe)
-
+(Launching an windows executable)
 
 http://pywinery.googlecode.com/svn/screenshots/0.2-0b.png
 
 (Prefix management interface, now features all launcher options)
 
 
-==0.1-7 release==
+== 0.1 releases ==
+
+===Downloads===
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfRERxQjJiejFuYTA pywinery_0.1-12_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfUVF0eGI2akRGMTg pywinery_0.1-11_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfUHZwUk5aWWxmZm8 pywinery_0.1-10_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfdG1GNVVVSm9Lb1k pywinery_0.1-9_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfSFVkWXVhemwyWFU pywinery_0.1-8_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfd0VhbFdWYzJLSFE pywinery_0.1-7_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfLW5QMkwzY0Q4aVk pywinery_0.1-6_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfaklJVVRqVDVkRXM pywinery_0.1-5_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfLXp4RG1wLV9SOXc pywinery_0.1-4_all.deb]
+ * [https://drive.google.com/file/d/0B4gfhO4VUgcfdUJvVnpUZ3VYN00 pywinery_0.1-3_all.deb]
 
 ===Screenshots===
 http://pywinery.googlecode.com/svn/screenshots/0.1-7a.png
 
 (Launching an exe, but standalone is much like this)
-
 
 http://pywinery.googlecode.com/svn/screenshots/0.1-7b.png
 
@@ -32,9 +49,8 @@ http://pywinery.googlecode.com/svn/screenshots/0.1-7b.png
 ===0.1-3 release screenshots===
 http://pywinery.googlecode.com/svn/screenshots/0.1-3a.png
 
-(Launching a .exe file inside a known prefix)
-
+(Launching an windows executable file inside a known prefix)
 
 http://pywinery.googlecode.com/svn/screenshots/0.1-3b.png
 
-(Running alone)
+(Running standalone)
