@@ -1,4 +1,4 @@
-#labels Featured,Downloads,Releases
+#labels Deprecated,Downloads
 = Old 'deprecated' releases =
 
 Work in progress...
