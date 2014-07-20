@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
+from pywinery import __version__
 
 setup(name         = 'pywinery',
-      version      = '0.3.2',
+      version      = __version__,
       author       = 'Felipe A. Hernandez',
       author_email = '<spayder26@gmail.com>',
       url          = 'http://pywinery.googlecode.com',

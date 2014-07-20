@@ -1,0 +1,17 @@
+
+pkgname='pywinery'
+pkgver='0.3-3'
+pkgrel=1
+pkgdesc='Wine prefix launcher and manager'
+arch='any'
+url='http://pywinery.googlecode.com'
+depends=('python-gobject>=3.4' 'python' 'xdg-utils' 'icoutils')
+optdepends=(
+    'wine: system-wide wine executable'        /
+    'winetricks: useful installer scripts'
+)
+makedepends=('python-setuptools')
+license='GPLv3'
+
+install='arch/pywinery.install'
+source=("pywinery::svn+https://pywinery.googlecode.com/svn/branches/0.3/")

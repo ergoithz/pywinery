@@ -1,0 +1,94 @@
+#!/bin/sh
+
+set -e
+
+# Updates defaults.list file if present.
+update_defaults_list() {
+  # $1: name of the .desktop file
+
+  local DEFAULTS_FILE="/usr/share/applications/defaults.list"
+
+  if [ ! -f "${DEFAULTS_FILE}" ]; then
+    return
+  fi
+
+  # Split key-value pair out of MimeType= line from the .desktop file,
+  # then split semicolon-separated list of mime types (they should not contain
+  # spaces).
+  mime_types="$(grep MimeType= /usr/share/applications/${1} |
+                cut -d '=' -f 2- |
+                tr ';' ' ')"
+  for mime_type in ${mime_types}; do
+    if egrep -q "^${mime_type}=" "${DEFAULTS_FILE}"; then
+      if ! egrep -q "^${mime_type}=.*${1}" "${DEFAULTS_FILE}"; then
+        default_apps="$(grep ${mime_type}= "${DEFAULTS_FILE}" |
+                        cut -d '=' -f 2-)"
+        egrep -v "^${mime_type}=" "${DEFAULTS_FILE}" > "${DEFAULTS_FILE}.new"
+        echo "${mime_type}=${default_apps};${1}" >> "${DEFAULTS_FILE}.new"
+        mv "${DEFAULTS_FILE}.new" "${DEFAULTS_FILE}"
+      fi
+    else
+      # If there's no mention of the mime type in the file, add it.
+      echo "${mime_type}=${1};" >> "${DEFAULTS_FILE}"
+    fi
+  done
+}
+
+HICOLOR_DIR="/usr/share/icons/hicolor" # reasonable default
+if [ -n "$XDG_DATA_DIRS" ]; then
+    xdg_system_dirs="$XDG_DATA_DIRS"
+else
+    xdg_system_dirs="/usr/local/share/:/usr/share/"
+fi
+
+for x in `echo "$xdg_system_dirs" | sed 's/:/ /g'`; do
+  if [ -w $x/icons/hicolor ]; then
+    HICOLOR_DIR="$x/icons/hicolor"
+    break
+  fi
+done
+
+add_icon() {
+    mkdir -p "$HICOLOR_DIR/$1/apps"
+    cp $2 "$HICOLOR_DIR/$1/apps/`basename $2`"
+}
+
+# This is a default template for a post-install scriptlet.
+# Uncomment only required functions and remove any functions
+# you don't need (and this header).
+
+## arg 1:  the new package version
+#pre_install() {
+    # do something here
+#}
+
+## arg 1:  the new package version
+post_install() {
+    update_defaults_list 'pywinery.desktop'
+    add_icon scalable '/usr/share/pywinery/pywinery.svg'
+    xdg-icon-resource forceupdate
+}
+
+## arg 1:  the new package version
+## arg 2:  the old package version
+#pre_upgrade() {
+    # do something here
+#}
+
+## arg 1:  the new package version
+## arg 2:  the old package version
+#post_upgrade() {
+    # do something here
+#}
+
+## arg 1:  the old package version
+#pre_remove() {
+    # do something here
+#}
+
+## arg 1:  the old package version
+#post_remove() {
+    # do something here
+#}
+
+
