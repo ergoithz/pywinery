@@ -1,3 +1,8 @@
+pywinery (0.3-3) testing; urgency=medium
+  * Python 3.4 compatibility.
+
+ -- Felipe A. Hernandez <spayder26@gmail.com>  Sun, 20 Jul 2014 19:00:00 +0100
+
 pywinery (0.3-2) testing; urgency=medium
   * Prefix duplication implemented.
   * Some dependency fixes (fixes issue#13).

@@ -16,7 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 # TODO(spayder26): locales
 __app__ = "pywinery"
-__version__ = (0, 3, 1)
+__version__ = '0.3.3'
 __author__ = "Felipe A. Hernandez <spayder26@gmail.com>"
 
 from os import environ, listdir, sep, linesep, kill  as os_kill, getuid,\
