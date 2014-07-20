@@ -16,7 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 # TODO(spayder26): locales
 __app__ = "pywinery"
-__version__ = (0, 3, 0)
+__version__ = (0, 3, 1)
 __author__ = "Felipe A. Hernandez <spayder26@gmail.com>"
 
 from os import environ, listdir, sep, linesep, kill  as os_kill, getuid,\
@@ -33,17 +33,24 @@ import operator
 import time
 import locale
 import datetime
-import urllib2
+
 import math
 import shutil
-import thread
-
-try:
-    import cStringIO as StringIO
-except ImportError:
-    import StringIO
 
 from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf, GObject
+
+py3k = sys.version > '3'
+if py3k:
+    import _thread as thread
+    from urllib.parse import quote as url_quote
+    iteritems = dict.items
+    MAXINT = sys.maxsize
+    xrange = range
+else:
+    import thread
+    from urllib2 import quote as url_quote
+    iteritems = dict.iteritems
+    MAXINT = sys.maxint
 
 # App config
 # app_path = os.path.dirname(os.path.abspath(__file__))
@@ -61,6 +68,9 @@ PREFIX_PATH = "$HOME/.local/share/wineprefixes" # prefix path by bottlespec
 
 # Trash pipe for subproccess functions
 DEVNULL = open(os.devnull, "a")
+
+# Encoding from console
+ENCODING = sys.stdout.encoding
 
 # Environ with no lang (for output parsing)
 CENV = environ.copy()
@@ -124,7 +134,7 @@ def getBin(name):
     try:
         return subprocess.check_output(
             ("which", name), env=CENV, stderr=DEVNULL
-            ).strip() or None
+            ).strip().decode(ENCODING) or None
     except subprocess.CalledProcessError:  # Non-zero rcode
         return None
 
@@ -139,7 +149,7 @@ def wineVersion():
     try:
         return subprocess.check_output(
             ("wine", "--version"), env=CENV, stderr=DEVNULL
-            ).strip() or None
+            ).strip().decode(ENCODING) or None
     except subprocess.CalledProcessError:  # Non-zero rcode
         return None
 
@@ -179,7 +189,7 @@ def legacy_to_bottlespec(defaults):
                     del configlines[j]
 
         # Newdir prefix linking
-        for key, values in configlines.iteritems():
+        for key, values in iteritems(configlines):
             if os.path.isdir(key): # We cannot import broken prefixes
                 end = key.split(sep)[-1]
                 prefix = Prefix(key, defaults)
@@ -292,6 +302,8 @@ class ExeInfoExtractor(object):
 class IconData(object):
 
     _pixbuf = None
+    _png_header = b"\x89PNG\r\n"
+
     @property
     def pixbuf(self):
         if self._pixbuf is None:
@@ -326,7 +338,7 @@ class IconData(object):
             bpp = max(
                 int(math.ceil(math.log(palette_size, 2))) if palette_size else 0,
                 bpp_hy)
-            if imgdata.startswith("\x89PNG\r\n"):
+            if imgdata.startswith(cls._png_header):
                 # PNG, stored with header
                 yield cls(w, h, "image/png", bpp, imgdata)
             elif imgdata:
@@ -392,7 +404,7 @@ class ExeIconExtractor(object):
             return subprocess.check_output(
                 (self._wrestool, "-l", path),
                 env=CENV, stderr=DEVNULL
-                ).strip().splitlines()
+                ).strip().decode(ENCODING).splitlines()
         except subprocess.CalledProcessError as e: # Non-zero rcode
             logger.debug(e)
         return ()
@@ -401,7 +413,7 @@ class ExeIconExtractor(object):
         if (path, icon_size) in self._pixbuf_cache:
             return self._pixbuf_cache[path, icon_size]
         elif self._wrestool is None:
-            return self._default_icon[path, icon_size]
+            return self._default_icon(path, icon_size)
         selected = None
         selected_score = INFINITE, 0
         pixels = icon_size*icon_size
@@ -898,7 +910,7 @@ class Prefix(object):
             else:
                 GLib.timeout_add(200, deferred_action)
 
-    _trash_time = sys.maxint
+    _trash_time = MAXINT
     def send_to_trash(self):
         '''
         Sends prefix to trash.
@@ -935,7 +947,7 @@ class Prefix(object):
         ppath = self.path
 
         matches = []
-        timedist = sys.maxint
+        timedist = MAXINT
         # Iterate over trash files
         for info in trashfile.enumerate_children(*self._trash_children_args):
             dpath = info.get_attribute_as_string(tpath)
@@ -969,8 +981,8 @@ class Prefix(object):
                 matches.sort()
                 match = matches[decpos]
             # Move from trash to original location
-            trashfile = Gio.File.new_for_uri("trash:///%s" % urllib2.quote(match))
-            destfile = Gio.File.new_for_uri("file://%s" %  urllib2.quote(ppath))
+            trashfile = Gio.File.new_for_uri("trash:///%s" % url_quote(match))
+            destfile = Gio.File.new_for_uri("file://%s" %  url_quote(ppath))
             trashfile.move(destfile, *self._trash_mvargs)
         elif retries > 0:
             # Retry
@@ -1887,7 +1899,7 @@ class Main(Gtk.Application):
             self.skip_nowine_message = True
 
     def handle_infobar3_response(self, windget, response):
-        self["infobar3"].set_property("visible". False)
+        self["infobar3"].set_property("visible", False)
 
     def _app_quit(self):
         Gtk.Application.quit(self)
@@ -2061,7 +2073,7 @@ class Main(Gtk.Application):
 
             model = self["iconstore1"]
             model.clear()
-            for text, (icon_names, requirements, command) in WINE_TOOLS.iteritems():
+            for text, (icon_names, requirements, command) in iteritems(WINE_TOOLS):
                 available = all(checkBin(i % exec_variables) for i in requirements)
                 icon = missing_icon
                 for icon_name in icon_names:
@@ -2117,7 +2129,7 @@ class Main(Gtk.Application):
         model.clear()
 
         names = [prefix.name for prefix in self.prefixes]
-        for prefix in sorted(self.prefixes, cmp=lambda x, y: locale.strcoll(x.name, y.name)):
+        for prefix in sorted(self.prefixes, key=lambda x: locale.strxfrm(x.name)):
             # Second name (path ending) if conflict
             alias2 = None
             if names.count(prefix.name) > 1:
