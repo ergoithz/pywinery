@@ -1,0 +1,28 @@
+# Introduction #
+
+Info for building and programming this app.
+
+
+# Details #
+## Building ##
+Python does not require compiling, but it's useful having this app as an deb, rpm... rather than a zipped script.
+
+Once on base dir: $ `dpkg-buildpackage -rfakeroot`
+
+## Design Tips ##
+PyWinery is useful and easy-to-use due its dialog-like interface. There is a lot of full featured wineprefix managers with cluttered inferfaces featuring thousands of options. Pywinery is, and should be, simpler as posible.
+
+~~This has a few drawbacks: Its intentionally minimal interface makes harder add new options, as seen in 0.2 release where I've forced to implement all prefix management using context menus avoiding a huge toolbar.~~
+
+0.2 branch's new context menu based approach was really counteruitive: For 0.3 branch I've decided to **strictly follow Gnome and Elementary's Human Interface Guidelines** that means: no hidden actions on context menus, predictable results and automation.
+
+
+I've decided, starting from 0.2 release, rename the "Open dialog", with "Create folder" button, from "New prefix" to "Import prefix", because users with no wine experience used to get a bit confused with it. I've made a new "New prefix" dialog which only asks user a prefix name. (see BottleSpec implementation)
+**This difference should be noted somewhere**, advising "Import prefix" dialog still allow users create their prefixes wherever they want.
+
+On 0.3 release, I made a huge UI overhaul based on user interaction analysis, so I replaced the context menu based interaction pattern with a more obvious one, showing buttons for adding or importing prefixes, executables, and replaced the threeview based configuration dialog with a classic configuration dialog design as seen in other applications. Based on user input, this changes seems to be a big step towards optimal pywinery's ease-to-use goal.
+
+## BottleSpec ##
+This app follow the [BottleSpec specification](http://wiki.winehq.org/BottleSpec), which makes it compatible with other prefix managers.
+
+One drawback: Winetricks is BottleSpec compliant too, so when called whatever prefix is selected it will ask user to select a working prefix again. Prior to 0.2 release the only available prefix was (if no other manager is used) the default one. I've oddly noted the pywinery selected prefix (set on WINEPREFIX environment variable) is used by winetricks when "Select the default wineprefix" option is choosen, what I didn't realize before. I understand the reason, but this can be annoying for end users.
