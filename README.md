@@ -1,6 +1,6 @@
 # PyWinery
 
-![](https://raw.githubusercontent.com/ergoithz/pywinery/master/branches/0.3/pywinery/pywinery.svg)
+![](/branches/0.3/pywinery/pywinery.svg?raw=true)
 
 PyWinery is a graphical, easy and simple wine-prefix manager which allows you to launch apps, explore and manage configuration of separate prefixes, graphically and faster than setting variables on linux shell.
 
@@ -28,14 +28,14 @@ PyWinery is a graphical, easy and simple wine-prefix manager which allows you to
 * [pywinery_0.3-2.tar.gz](https://drive.google.com/file/d/0B4gfhO4VUgcfb2Z1RkNQT2wyYlU) (source tarball)
 
 #### Screenshots
-![Screenshot](http://pywinery.googlecode.com/svn/screenshots/0.3-2a.png)
+![Screenshot](/screenshots/0.3-2a.png?raw=true)
 
 (Creating a prefix)
 
-![Screenshot](http://pywinery.googlecode.com/svn/screenshots/0.3-2b.png)
+![Screenshot](screenshots/0.3-2b.png?raw=true)
 
 (Prefix management interface)
 
-![Screenshot](http://pywinery.googlecode.com/svn/screenshots/0.3-2c.png)
+![Screenshot](/screenshots/0.3-2c.png?raw=true)
 
 (Launching an exe)
