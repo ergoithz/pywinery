@@ -825,8 +825,8 @@ class Prefix(object):
     def wine(self, command, env=None, debug=False):
         winepath = self["ww_wine"] or self["default_winepath"]
         if winepath is None:
-            raise NoWineError
-        popen = self.run((winepath,)+command, env, debug)
+            raise NoWineException('wine not available')
+        popen = self.run((winepath,) + command, env, debug)
         return popen
 
     def run(self, command, env=None, debug=False):
@@ -847,9 +847,10 @@ class Prefix(object):
             "WINEDEBUG": "+all" if debug else "-all",
             "WINEDLLOVERRIDES": ";".join(dlloverrides),
             "WINEPREFIX": self.path,
-            "WINESERVER": self["ww_wineserver"] or self["default_wineserverpath"],
-            "WINELOADER": self["ww_wine"] or self["default_winepath"]
+            "WINESERVER": self["ww_wineserver"] or self["default_wineserverpath"] or '',
+            "WINELOADER": self["ww_wine"] or self["default_winepath"] or ''
             })
+        print(command, env)
         return subprocess.Popen(command, env = env)
 
     def _initial_save(self):
@@ -888,7 +889,10 @@ class Prefix(object):
         if self._path.startswith(newdir):
             # Must be created
             if not os.path.exists(self._path):
-                self.wine(("wineboot", "-i")) # WINE BUG WORKAROUND
+                try:
+                    self.wine(("wineboot", "-i")) # WINE BUG WORKAROUND
+                except NoWineException:
+                    pass
                 deferred_action = self._initial_save
         # External prefix (aka symlink prefix)
         else:
@@ -898,7 +902,10 @@ class Prefix(object):
                 )
             # Must be created
             if not os.path.exists(self._path):
-                self.wine(("wineboot", "-i")) # WINE BUG WORKAROUND
+                try:
+                    self.wine(("wineboot", "-i")) # WINE BUG WORKAROUND
+                except NoWineException:
+                    intialized_False
                 deferred_action = functools.partial(self._symlink_save, new_path)
             else:
                 self._symlink_save(new_path)
@@ -1666,6 +1673,25 @@ class Main(Gtk.Application):
             self.current_prefix = self.prefixes_by_path[path]
             internal = False
         elif allow_internals and action == self.LIST_NEW:
+            if not self.default_winepath:
+                dialog1 = Gtk.MessageDialog(
+                    self["dialog_main"],
+                    Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                    Gtk.MessageType.QUESTION,
+                    Gtk.ButtonsType.OK_CANCEL,
+                    _("Prefix won't be initialized, do you wish to continue?")
+                    )
+                dialog1.set_property('secondary-text', _("Wine not in PATH, manual initialization with \" <tt>wineboot -i PREFIX_PATH</tt> \" would be required."))
+                dialog1.set_property('secondary-use-markup', 'TRUE')
+                while True:
+                    response = dialog1.run()
+                    dialog1.hide()
+                    if response == Gtk.ResponseType.OK:
+                        dialog1.destroy()
+                        break
+                    else:
+                        dialog1.destroy()
+                        return internal
             name, arch = self.aux_dialog_prefix_name(
                 arch=self.default_arch,
                 new=True,
@@ -1812,21 +1838,21 @@ class Main(Gtk.Application):
                 self["treeview1"].set_cursor((prefixpos,))
 
                 # These changes emit signals, we have to check changes first
-                if self["entry1"].get_text() != prefix.name:
+                if self["entry1"].get_text() != prefix.name and prefix.name:
                     self["entry1"].set_text(prefix.name)
 
-                if self["label8"].get_label() != prefix.arch:
+                if self["label8"].get_label() != prefix.arch and prefix.arch:
                     self["label8"].set_label(prefix.arch)
 
                 if self["checkbutton2"].get_property("active") != prefix.winemenubuilder_disable:
                     self["checkbutton2"].set_property("active", prefix.winemenubuilder_disable)
 
                 winepath = self.current_prefix.winepath or self.default_winepath
-                if winepath != self["filechooserbutton1"].get_filename():
+                if winepath != self["filechooserbutton1"].get_filename() and winepath:
                     self["filechooserbutton1"].set_filename(winepath)
 
                 wineserverpath = self.current_prefix.wineserverpath or self.default_wineserverpath
-                if wineserverpath != self["filechooserbutton1"].get_filename():
+                if wineserverpath != self["filechooserbutton1"].get_filename() and wineserverpath:
                     self["filechooserbutton2"].set_filename(wineserverpath)
                 self.action_gui_executables()
 
