@@ -699,7 +699,7 @@ class Prefix(object):
 
             # Inline value substitution
             for n, line in enumerate(data):
-                if line.split("=")[0] == x:
+                if line.split("=", 1)[0] == x:
                     if del_item:
                         if "#" in line:
                             # preserve comment
@@ -737,7 +737,7 @@ class Prefix(object):
             f.close()
             for line in data: # We cache all data
                 if "=" in line:
-                    key, value = line.split("=")
+                    key, value = line.split("=", 1)
                     if "#" in key:
                         continue
                     elif "#" in value:
@@ -756,7 +756,7 @@ class Prefix(object):
                 return self._cache[x]
         if x in self._defaults:
             return self._defaults[x]
-        raise KeyError("No variable with name %s." % x)
+        return None
 
     def _write(self, lines=None):
         '''
