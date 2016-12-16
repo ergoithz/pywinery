@@ -1,6 +1,6 @@
 # PyWinery
 
-![](/branches/0.3/pywinery/pywinery.svg?raw=true)
+![](https://cdn.rawgit.com/ergoithz/pywinery/master/branches/0.3/pywinery/pywinery.svg)
 
 PyWinery is a graphical, easy and simple wine-prefix manager which allows you to launch apps, explore and manage configuration of separate prefixes, graphically and faster than setting variables on linux shell.
 
