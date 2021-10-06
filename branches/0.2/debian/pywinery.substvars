@@ -1,3 +1,0 @@
-python:Versions=all
-python:Depends=python, python-central (>= 0.6.11)
-misc:Depends=
