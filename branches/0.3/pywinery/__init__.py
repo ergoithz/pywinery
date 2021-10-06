@@ -37,6 +37,8 @@ import datetime
 import math
 import shutil
 
+import gi
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf, GObject
 
 py3k = sys.version > '3'
